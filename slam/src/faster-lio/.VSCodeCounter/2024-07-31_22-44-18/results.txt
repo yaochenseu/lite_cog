@@ -1,0 +1,123 @@
+Date : 2024-07-31 22:44:18
+Directory : /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio
+Total : 65 files,  7198 codes, 1625 comments, 1352 blanks, all 10175 lines
+
+Languages
++---------------+------------+------------+------------+------------+------------+
+| language      | files      | code       | comment    | blank      | total      |
++---------------+------------+------------+------------+------------+------------+
+| C++           |         29 |      5,680 |      1,499 |      1,095 |      8,274 |
+| YAML          |         10 |        731 |         10 |         64 |        805 |
+| Python        |          6 |        281 |         51 |         67 |        399 |
+| CMake         |          2 |        242 |          0 |         28 |        270 |
+| XML           |         11 |        203 |         47 |         72 |        322 |
+| Log           |          1 |         19 |          0 |          1 |         20 |
+| ROS Interface |          3 |         19 |          3 |          6 |         28 |
+| Shell Script  |          1 |         12 |          3 |          9 |         24 |
+| Docker        |          1 |          9 |          7 |          6 |         22 |
+| Properties    |          1 |          2 |          5 |          4 |         11 |
++---------------+------------+------------+------------+------------+------------+
+
+Directories
++------------------------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                                                                     | files      | code       | comment    | blank      | total      |
++------------------------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                                                        |         65 |      7,198 |      1,625 |      1,352 |     10,175 |
+| . (Files)                                                                                                                                |          1 |         36 |          0 |          9 |         45 |
+| app                                                                                                                                      |          2 |        106 |         12 |         33 |        151 |
+| cmake                                                                                                                                    |          2 |        242 |          0 |         28 |        270 |
+| config                                                                                                                                   |          8 |        321 |          8 |         58 |        387 |
+| docker                                                                                                                                   |          4 |         44 |         17 |         24 |         85 |
+| include                                                                                                                                  |         23 |      4,687 |      1,427 |        889 |      7,003 |
+| include (Files)                                                                                                                          |          8 |        893 |        125 |        205 |      1,223 |
+| include/IKFoM_toolkit                                                                                                                    |         11 |      2,620 |      1,100 |        424 |      4,144 |
+| include/IKFoM_toolkit/esekfom                                                                                                            |          2 |      1,572 |        244 |        159 |      1,975 |
+| include/IKFoM_toolkit/mtk                                                                                                                |          9 |      1,048 |        856 |        265 |      2,169 |
+| include/IKFoM_toolkit/mtk (Files)                                                                                                        |          2 |        243 |        224 |         54 |        521 |
+| include/IKFoM_toolkit/mtk/src                                                                                                            |          3 |        236 |        275 |         67 |        578 |
+| include/IKFoM_toolkit/mtk/types                                                                                                          |          4 |        569 |        357 |        144 |      1,070 |
+| include/ivox3d                                                                                                                           |          4 |      1,174 |        202 |        260 |      1,636 |
+| launch                                                                                                                                   |          9 |        135 |         11 |         48 |        194 |
+| log                                                                                                                                      |          1 |         19 |          0 |          1 |         20 |
+| log/list_2024-07-31_22-44-14                                                                                                             |          1 |         19 |          0 |          1 |         20 |
+| msg                                                                                                                                      |          1 |          6 |          1 |          0 |          7 |
+| result                                                                                                                                   |          6 |        281 |         51 |         67 |        399 |
+| rviz_cfg                                                                                                                                 |          1 |        389 |          0 |          1 |        390 |
+| src                                                                                                                                      |          4 |        887 |         60 |        173 |      1,120 |
+| thirdparty                                                                                                                               |          3 |         45 |         38 |         21 |        104 |
+| thirdparty/livox_ros_driver                                                                                                              |          3 |         45 |         38 |         21 |        104 |
+| thirdparty/livox_ros_driver (Files)                                                                                                      |          1 |         32 |         36 |         15 |         83 |
+| thirdparty/livox_ros_driver/msg                                                                                                          |          2 |         13 |          2 |          6 |         21 |
++------------------------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++------------------------------------------------------------------------------------------------------------------------------------------+---------------+------------+------------+------------+------------+
+| filename                                                                                                                                 | language      | code       | comment    | blank      | total      |
++------------------------------------------------------------------------------------------------------------------------------------------+---------------+------------+------------+------------+------------+
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/app/run_mapping_offline.cc                         | C++           |         71 |          7 |         21 |         99 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/app/run_mapping_online.cc                          | C++           |         35 |          5 |         12 |         52 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/cmake/FindGlog.cmake                               | CMake         |        192 |          0 |         18 |        210 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/cmake/packages.cmake                               | CMake         |         50 |          0 |         10 |         60 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/config/avia.yaml                                   | YAML          |         40 |          1 |          8 |         49 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/config/c16.yaml                                    | YAML          |         40 |          1 |          7 |         48 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/config/horizon.yaml                                | YAML          |         37 |          1 |          6 |         44 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/config/ouster64.yaml                               | YAML          |         40 |          1 |          7 |         48 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/config/velodyne.yaml                               | YAML          |         41 |          1 |          7 |         49 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/config/velodyne_liosam.yaml                        | YAML          |         41 |          1 |          7 |         49 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/config/velodyne_ulhk.yaml                          | YAML          |         41 |          1 |          8 |         50 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/config/velodyne_utbm.yaml                          | YAML          |         41 |          1 |          8 |         50 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/docker/.env                                        | Properties    |          2 |          5 |          4 |         11 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/docker/Dockerfile                                  | Docker        |          9 |          7 |          6 |         22 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/docker/docker-compose.yml                          | YAML          |         21 |          2 |          5 |         28 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/docker/ros_entrypoint.sh                           | Shell Script  |         12 |          3 |          9 |         24 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/IKFoM_toolkit/esekfom/esekfom.hpp          | C++           |      1,541 |        211 |        150 |      1,902 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/IKFoM_toolkit/esekfom/util.hpp             | C++           |         31 |         33 |          9 |         73 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/IKFoM_toolkit/mtk/build_manifold.hpp       | C++           |        100 |        101 |         20 |        221 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/IKFoM_toolkit/mtk/src/SubManifold.hpp      | C++           |         15 |         91 |         12 |        118 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/IKFoM_toolkit/mtk/src/mtkmath.hpp          | C++           |        145 |        107 |         37 |        289 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/IKFoM_toolkit/mtk/src/vectview.hpp         | C++           |         76 |         77 |         18 |        171 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/IKFoM_toolkit/mtk/startIdx.hpp             | C++           |        143 |        123 |         34 |        300 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/IKFoM_toolkit/mtk/types/S2.hpp             | C++           |        159 |         85 |         26 |        270 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/IKFoM_toolkit/mtk/types/SOn.hpp            | C++           |        119 |        129 |         40 |        288 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/IKFoM_toolkit/mtk/types/vect.hpp           | C++           |        250 |        104 |         62 |        416 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/IKFoM_toolkit/mtk/types/wrapped_cv_mat.hpp | C++           |         41 |         39 |         16 |         96 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/common_lib.h                               | C++           |        166 |         42 |         38 |        246 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/imu_processing.hpp                         | C++           |        246 |         16 |         60 |        322 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/ivox3d/eigen_types.h                       | C++           |         58 |         10 |         17 |         85 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/ivox3d/hilbert.hpp                         | C++           |        550 |        167 |        114 |        831 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/ivox3d/ivox3d.h                            | C++           |        238 |         21 |         49 |        308 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/ivox3d/ivox3d_node.hpp                     | C++           |        328 |          4 |         80 |        412 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/laser_mapping.h                            | C++           |        130 |         15 |         33 |        178 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/options.h                                  | C++           |         13 |          5 |          7 |         25 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/pointcloud_preprocess.h                    | C++           |         88 |         25 |         20 |        133 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/so3_math.h                                 | C++           |         76 |          4 |         14 |         94 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/use-ikfom.hpp                              | C++           |         90 |          4 |         16 |        110 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/include/utils.h                                    | C++           |         84 |         14 |         17 |        115 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/launch/gdb_debug_example.launch                    | XML           |         15 |          3 |          5 |         23 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/launch/mapping_avia.launch                         | XML           |         15 |          1 |          6 |         22 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/launch/mapping_c16.launch                          | XML           |         15 |          1 |          6 |         22 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/launch/mapping_horizon.launch                      | XML           |         15 |          1 |          5 |         21 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/launch/mapping_ouster64.launch                     | XML           |         15 |          1 |          6 |         22 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/launch/mapping_velodyne.launch                     | XML           |         15 |          1 |          5 |         21 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/launch/mapping_velodyne_liosam.launch              | XML           |         15 |          1 |          5 |         21 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/launch/mapping_velodyne_ulhk.launch                | XML           |         15 |          1 |          5 |         21 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/launch/mapping_velodyne_utbm.launch                | XML           |         15 |          1 |          5 |         21 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/log/list_2024-07-31_22-44-14/logger_all.log        | Log           |         19 |          0 |          1 |         20 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/msg/Pose6D.msg                                     | ROS Interface |          6 |          1 |          0 |          7 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/package.xml                                        | XML           |         36 |          0 |          9 |         45 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/result/plot_bar_time_by_step.py                    | Python        |         47 |          2 |          8 |         57 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/result/plot_nn.py                                  | Python        |         23 |          1 |          6 |         30 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/result/plot_process_recall.py                      | Python        |         39 |          2 |         12 |         53 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/result/plot_time.py                                | Python        |         34 |          7 |          7 |         48 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/result/plot_time_usage.py                          | Python        |         82 |         34 |         20 |        136 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/result/rpe_odom.py                                 | Python        |         56 |          5 |         14 |         75 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/rviz_cfg/loam_livox.rviz                           | YAML          |        389 |          0 |          1 |        390 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/src/laser_mapping.cc                               | C++           |        695 |         51 |        125 |        871 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/src/options.cc                                     | C++           |          6 |          3 |          4 |         13 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/src/pointcloud_preprocess.cc                       | C++           |        182 |          3 |         40 |        225 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/src/utils.cc                                       | C++           |          4 |          3 |          4 |         11 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/thirdparty/livox_ros_driver/msg/CustomMsg.msg      | ROS Interface |          6 |          1 |          3 |         10 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/thirdparty/livox_ros_driver/msg/CustomPoint.msg    | ROS Interface |          7 |          1 |          3 |         11 |
+| /media/zox/36c0d412-c5a3-4d73-8ece-b4e01cfb90e6/home/ysc/lite_cog/slam/src/faster-lio/thirdparty/livox_ros_driver/package.xml            | XML           |         32 |         36 |         15 |         83 |
+| Total                                                                                                                                    |               |      7,198 |      1,625 |      1,352 |     10,175 |
++------------------------------------------------------------------------------------------------------------------------------------------+---------------+------------+------------+------------+------------+

@@ -1,0 +1,81 @@
+<launch>
+    <!-- 相机竖放或平放 vertical or horizontal -->
+    <arg name="camera_pose" default="vertical" />
+    <!-- 是否打开可视化界面Rviz --> 
+    <arg name="enable_rviz" default="true" />
+    <!-- 是否打开机器人urdf模型 -->
+    <arg name="enable_urdf" default="true" />
+    <!-- 是否在Rviz中显示足底轨迹 -->
+    <arg name="enable_joint_path" default="false" />
+    <!-- 是否打开运动传输程序 -->
+    <arg name="enable_transformer" default="false" />
+    <!-- 是否使用数据集运行（且没有相机tf） -->
+    <arg name="enable_camera_optical_tf" default="true" />
+    <!-- 是否打开地形图传输程序 -->
+    <arg name="enable_gridmap_transformer" default="false" />
+
+    <!-- <env name="ROSCONSOLE_CONFIG_FILE" value="$(find deeprobotics_local_height_map)/config/setting.conf"/> -->
+
+    <group if="$(eval arg('camera_pose') == 'horizontal')">
+      <!-- 地形图 -->
+      <node pkg="deeprobotics_local_height_map" type="deeprobotics_local_height_map" name="deeprobotics_local_height_map" output="screen">
+        <rosparam command="load" file="$(find deeprobotics_local_height_map)/config/param_all_camera_h.yaml" />
+      </node>
+      <!-- 发布静态TF变换 -->
+      <!-- 水平20度相机 -->
+      <node pkg="tf2_ros" type="static_transform_publisher" name="base2camera" args="0.321 0 0.017 0 0.349 0 /base_link /camera_link" />
+      <!-- 水平30度相机 -->
+      <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="base2camera" args="0.321 0 0.017 0 0.5236 0 /base_link /camera_link" /> -->
+    </group>
+
+    <group if="$(eval arg('camera_pose') == 'vertical')">
+      <!-- 地形图 -->
+      <node pkg="deeprobotics_local_height_map" type="deeprobotics_local_height_map" name="deeprobotics_local_height_map" output="screen">
+        <rosparam command="load" file="$(find deeprobotics_local_height_map)/config/param_all_camera_v.yaml" />
+      </node>
+      <!-- 发布静态TF变换 --><!-- 竖直侧看20度相机 -->
+      <node pkg="tf2_ros" type="static_transform_publisher" name="base2leftcamera" args="0.34182 0.04597 0.01377 -0.7064338 0.2705981 0.0308436 0.6532815 /base_link /camera_front_left_link" />
+      <node pkg="tf2_ros" type="static_transform_publisher" name="base2rightcamera" args="0.34182 -0.04597 0.01377 -0.6532815 0.0308436 0.2705981 0.7064338 /base_link /camera_front_right_link" />
+    </group>
+
+    <!-- udp -->
+    <group if="$(arg enable_transformer)">
+      <include file="$(find message_transformer_cpp)/launch/message_transformer_cpp.launch" />
+    </group>
+    
+    <!-- 地形图传输程序 -->
+    <group if="$(arg enable_gridmap_transformer)">
+      <node pkg="deeprobotics_grid_map_transformer" type="grid_map_transform_app" name="grid_map_transform_app" />
+    </group>
+
+    <!-- 静态TF变换 -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="base_link2lidar" args="0.243 0.0 0.1167 0 0 0 base_link rslidar" />
+
+    <!--发布相机静态TF变换-->
+    <group if="$(arg enable_camera_optical_tf)">
+      <node pkg="tf2_ros" type="static_transform_publisher" name="leftcamera2opticaldepth" args="0 0 0 -0.5 0.5 -0.5 0.5 /camera_front_left_link /camera_front_left_depth_optical_frame" />
+      <node pkg="tf2_ros" type="static_transform_publisher" name="rightcamera2opticaldepth" args="0 0 0 -0.5 0.5 -0.5 0.5 /camera_front_right_link /camera_front_right_depth_optical_frame" />
+      <node pkg="tf2_ros" type="static_transform_publisher" name="leftcamera2opticalcolor" args="0 0.015 0 -0.5 0.5 -0.5 0.5 /camera_front_left_link /camera_front_left_color_optical_frame" />
+      <node pkg="tf2_ros" type="static_transform_publisher" name="rightcamera2opticalcolor" args="0 0.015 0 -0.5 0.5 -0.5 0.5 /camera_front_right_link /camera_front_right_color_optical_frame" />
+    </group>
+    
+    <!-- urdf -->
+    <group if="$(arg enable_urdf)">
+      <node pkg="tf2_ros" type="static_transform_publisher" name="base2urdf" args="0.243 0 0.1767 -1.571 0 0 /base_link /body" />
+      <param name="robot_description" textfile="$(find mini)/urdf/mini.urdf" />
+      <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher" />
+    </group>
+
+    <!-- joint path -->
+    <group if="$(arg enable_joint_path)">
+      <node name="draw" pkg="deeprobotics_local_height_map" type="draw"  output="screen" />
+    </group>
+
+    <!-- RVIZ -->
+    <group if="$(arg enable_rviz)">
+      <node name="rviz" pkg="rviz" type="rviz" args="-d $(find deeprobotics_local_height_map)/rviz/height_map_camera.rviz" />
+    </group>
+
+</launch>
+
+

@@ -1,0 +1,9 @@
+
+<launch>
+    
+    <!--RVIZ-->
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find deeprobotics_local_height_map)/rviz/height_map_camera.rviz" />
+</launch>
+
+
+ 

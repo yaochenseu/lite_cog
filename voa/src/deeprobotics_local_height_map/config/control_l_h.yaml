@@ -1,0 +1,46 @@
+forwardVelMax: 0.6
+backwardVelMax: 0.6
+pureSideVelMax: 0.2
+forwardSideVelMax: 0.4
+forwardSideVelMin: 0.2
+forwardSideVelCorrectWeight: 1.0
+yawVelMax: 0.45
+yVelThreshold: 0.45
+yRestDistanceThreshold: 0.36
+yFarWayThreshold: 0.35   #v0.45 h0.35
+ySafeManualdistanceThreshold: 0.15
+forwardVelIndex: 1.0
+yVelIndex: 1.0
+forwardVelBarrierSub: 0.5
+dynamicWeight: 0.2
+dynamicWeight2: 0.1
+forwardSideVelMaxWeight: 0.25
+yVelManualAddRate: 1.7
+yVelLookForFarWayRate: 2.0
+trotSlopeThreshold: 1.1
+
+xForwardStart: 0.35
+yLeftStart: 0.2
+yRightStart: -0.2
+xForwardEnd: 1.5
+sideEnd: 0.5
+yForwardEnd: 0.6
+forwardLength: 0.25
+backwardLength: 0.45
+wide: 0.25
+sideThreshold: 0.45
+frontStopThreshold: 0.4775
+
+usDistanceUpperThreshold: 1.5
+usDistanceLowerThreshold: 0.5
+backwardVelMin: 0.1
+
+robotFrame: "base_link"
+worldFrame: "world"
+
+
+
+
+
+
+

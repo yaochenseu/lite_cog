@@ -1,0 +1,902 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.5.1-0-g916b5db  Build Version: 1.5.7152.31018
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="mini">
+  <link
+    name="body">
+    <inertial>
+      <origin
+        xyz="0.000245440255894021 -0.26690950846453 -0.119018694634333"
+        rpy="0 0 0" />
+      <mass
+        value="1.84058687159975" />
+      <inertia
+        ixx="0.0745416996110355"
+        ixy="0.000148661882664406"
+        ixz="1.88535341290636E-05"
+        iyy="0.0142146049224298"
+        iyz="0.000140555794754809"
+        izz="0.0755493806951746" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/body.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/body.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="LF">
+    <inertial>
+      <origin
+        xyz="0.0501797505978839 -0.00117714841636699 -0.00101274607086331"
+        rpy="0 0 0" />
+      <mass
+        value="0.0848927357980997" />
+      <inertia
+        ixx="5.74845888913753E-05"
+        ixy="-3.26354780273533E-06"
+        ixz="7.14333133904963E-07"
+        iyy="0.0001013648956261"
+        iyz="8.40365965620821E-07"
+        izz="0.000118406896361467" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/LF.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/LF.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="FL_HipX"
+    type="revolute">
+    <origin
+      xyz="-0.0619999997813264 -0.0670000002339657 -0.129699999983671"
+      rpy="-1.5707963267949 0 1.57079633005868" />
+    <parent
+      link="body" />
+    <child
+      link="LF" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="LF_1">
+    <inertial>
+      <origin
+        xyz="-0.00454268776611239 0.0356868315480052 0.0462116917048522"
+        rpy="0 0 0" />
+      <mass
+        value="0.254274593126043" />
+      <inertia
+        ixx="0.00171033616198927"
+        ixy="0.000114548554163662"
+        ixz="1.57834810918413E-06"
+        iyy="0.000356452736244077"
+        iyz="-1.21809361527448E-05"
+        izz="0.00177134098650171" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/LF_1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.250980392156863 0.250980392156863 0.250980392156863 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/LF_1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="FL_HipY"
+    type="revolute">
+    <origin
+      xyz="0.055 0 0.0369999999999973"
+      rpy="0 0 0" />
+    <parent
+      link="LF" />
+    <child
+      link="LF_1" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="LF_2">
+    <inertial>
+      <origin
+        xyz="-0.00791119514784239 0.155371104176032 -0.0185125947760823"
+        rpy="0 0 0" />
+      <mass
+        value="0.0821021793793291" />
+      <inertia
+        ixx="0.00101039886412487"
+        ixy="4.79164938059237E-05"
+        ixz="-2.26551882075619E-09"
+        iyy="1.4593471616848E-05"
+        iyz="1.11680724458971E-07"
+        izz="0.00101698105673901" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/LF_2.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/LF_2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="FL_Knee"
+    type="revolute">
+    <origin
+      xyz="-0.00284717615831659 0.249983786652555 0.0659999999907074"
+      rpy="0 0 0" />
+    <parent
+      link="LF_1" />
+    <child
+      link="LF_2" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="LB">
+    <inertial>
+      <origin
+        xyz="-0.0501797531184657 -0.00117714574142191 -0.00101275926123656"
+        rpy="0 0 0" />
+      <mass
+        value="0.0848928229213895" />
+      <inertia
+        ixx="5.74846138998654E-05"
+        ixy="3.26354164295674E-06"
+        ixz="-7.14334685545111E-07"
+        iyy="0.000101364933311542"
+        iyz="8.40365622492163E-07"
+        izz="0.000118406933977841" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/LB.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/LB.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="FR_HipX"
+    type="revolute">
+    <origin
+      xyz="-0.0619999986324702 -0.419000000233966 -0.129699999897879"
+      rpy="-1.5707963267949 0 1.57079633005868" />
+    <parent
+      link="body" />
+    <child
+      link="LB" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="LB_1">
+    <inertial>
+      <origin
+        xyz="-0.0056088186033082 0.0355348305242741 0.0462116950281868"
+        rpy="0 0 0" />
+      <mass
+        value="0.254274504205363" />
+      <inertia
+        ixx="0.00170226762302061"
+        ixy="0.00015484937981588"
+        ixz="1.94225212328637E-06"
+        iyy="0.000364519918862472"
+        iyz="-1.21283043073719E-05"
+        izz="0.00177133963348735" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/LB_1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.250980392156863 0.250980392156863 0.250980392156863 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/LB_1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="FR_HipY"
+    type="revolute">
+    <origin
+      xyz="-0.0550000000000016 0 0.037"
+      rpy="0 0 0" />
+    <parent
+      link="LB" />
+    <child
+      link="LB_1" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="LB_2">
+    <inertial>
+      <origin
+        xyz="-0.01291813699497 0.155035129786747 -0.0185125939520661"
+        rpy="0 0 0" />
+      <mass
+        value="0.0821021858706785" />
+      <inertia
+        ixx="0.00100627386659396"
+        ixy="7.99170020567905E-05"
+        ixz="-5.864592490093E-09"
+        iyy="1.87185267024882E-05"
+        iyz="1.1154642349817E-07"
+        izz="0.00101698111179844" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/LB_2.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/LB_2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="FR_Knee"
+    type="revolute">
+    <origin
+      xyz="-0.0103284822954822 0.24978655379728 0.06599999996629"
+      rpy="0 0 0" />
+    <parent
+      link="LB_1" />
+    <child
+      link="LB_2" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="RF">
+    <inertial>
+      <origin
+        xyz="0.0501797538865763 -0.00118185349852255 0.00100726133774833"
+        rpy="0 0 0" />
+      <mass
+        value="0.0848928210166398" />
+      <inertia
+        ixx="5.74846137695991E-05"
+        ixy="-3.26017620735351E-06"
+        ixz="-7.2953919050443E-07"
+        iyy="0.000101373135436778"
+        iyz="-9.19764539896138E-07"
+        izz="0.000118398727095263" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RF.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RF.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="HL_HipX"
+    type="revolute">
+    <origin
+      xyz="0.062 -0.067 -0.1297"
+      rpy="-1.5708 0 1.5708" />
+    <parent
+      link="body" />
+    <child
+      link="RF" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="RF_1">
+    <inertial>
+      <origin
+        xyz="-0.00458432071406256 0.0361665598779678 -0.0465249028793709"
+        rpy="0 0 0" />
+      <mass
+        value="0.254869917041049" />
+      <inertia
+        ixx="0.00170414629635864"
+        ixy="0.000118123686872183"
+        ixz="-2.09865571019765E-07"
+        iyy="0.000353649344011661"
+        iyz="3.12027441252963E-06"
+        izz="0.00176809632277789" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RF_1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.250980392156863 0.250980392156863 0.250980392156863 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RF_1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="HL_HipY"
+    type="revolute">
+    <origin
+      xyz="0.055 0.00017246 -0.037"
+      rpy="0 0 0" />
+    <parent
+      link="RF" />
+    <child
+      link="RF_1" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="RF_2">
+    <inertial>
+      <origin
+        xyz="-0.00837193817002385 0.155346959509884 0.0184874037320066"
+        rpy="0 0 0" />
+      <mass
+        value="0.0821021795597598" />
+      <inertia
+        ixx="0.0010101059082602"
+        ixy="5.08688459114004E-05"
+        ixz="-2.59605536121194E-09"
+        iyy="1.48864269461338E-05"
+        iyz="1.11664906639562E-07"
+        izz="0.00101698106065422" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RF_2.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RF_2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="HL_Knee"
+    type="revolute">
+    <origin
+      xyz="-0.0035844 0.25028 -0.064834"
+      rpy="0.0046612 0 0" />
+    <parent
+      link="RF_1" />
+    <child
+      link="RF_2" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="RB">
+    <inertial>
+      <origin
+        xyz="-0.050179750597884 -0.00117714841636701 0.00101274607086329"
+        rpy="0 0 0" />
+      <mass
+        value="0.0848927357981" />
+      <inertia
+        ixx="5.74845888913754E-05"
+        ixy="3.26354780273531E-06"
+        ixz="7.1433313390485E-07"
+        iyy="0.0001013648956261"
+        iyz="-8.40365965620812E-07"
+        izz="0.000118406896361468" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RB.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RB.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="HR_HipX"
+    type="revolute">
+    <origin
+      xyz="0.062 -0.419 -0.1297"
+      rpy="-1.5708 0 1.5708" />
+    <parent
+      link="body" />
+    <child
+      link="RB" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="RB_1">
+    <inertial>
+      <origin
+        xyz="-0.00580444812856595 0.0357725246263385 -0.0491929707801751"
+        rpy="0 0 0" />
+      <mass
+        value="0.254869812968442" />
+      <inertia
+        ixx="0.00169455137955729"
+        ixy="0.000163755581509164"
+        ixz="-1.09037765719604E-06"
+        iyy="0.000363302525061901"
+        iyz="9.68146134861953E-06"
+        izz="0.00176803496348713" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RB_1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.250980392156863 0.250980392156863 0.250980392156863 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RB_1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="HR_HipY"
+    type="revolute">
+    <origin
+      xyz="-0.055 0 -0.0345"
+      rpy="0 0 0" />
+    <parent
+      link="RB" />
+    <child
+      link="RB_1" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="RB_2">
+    <inertial>
+      <origin
+        xyz="-0.00702662858027892 0.155413621022406 0.0184874049559236"
+        rpy="0 0 0" />
+      <mass
+        value="0.0821021804602638" />
+      <inertia
+        ixx="0.00101091211199855"
+        ixy="4.22449310017215E-05"
+        ixz="-1.63024498375539E-09"
+        iyy="1.40802264704191E-05"
+        iyz="1.11692993138164E-07"
+        izz="0.00101698105964998" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RB_2.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RB_2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="HR_Knee"
+    type="revolute">
+    <origin
+      xyz="-0.0120851358149442 0.249707728128166 -0.0685000000394434"
+      rpy="0 0 0" />
+    <parent
+      link="RB_1" />
+    <child
+      link="RB_2" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="Lidar">
+    <inertial>
+      <origin
+        xyz="3.31640316434539E-06 0.0357452861533647 0.000168293826702581"
+        rpy="0 0 0" />
+      <mass
+        value="0.590032077795476" />
+      <inertia
+        ixx="0.000647464608320236"
+        ixy="6.45580533550386E-08"
+        ixz="2.89532307924072E-10"
+        iyy="0.000774943193326064"
+        iyz="2.80453300263633E-06"
+        izz="0.000641326417350481" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/Lidar.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/Lidar.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Lidar_Joint"
+    type="fixed">
+    <origin
+      xyz="0 0 -0.0717"
+      rpy="1.5708 0 0" />
+    <parent
+      link="body" />
+    <child
+      link="Lidar" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="RealSence_F">
+    <inertial>
+      <origin
+        xyz="-0.0220687308289624 0.0467473259367573 0.378467842281016"
+        rpy="0 0 0" />
+      <mass
+        value="0.0483821864790052" />
+      <inertia
+        ixx="4.59957024125321E-06"
+        ixy="1.59319006516822E-07"
+        ixz="4.42312645141517E-07"
+        iyy="2.9922649412762E-05"
+        iyz="-4.11068005512863E-08"
+        izz="2.98432126115266E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RealSence_F.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RealSence_F.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="RealSence_F_Joint"
+    type="fixed">
+    <origin
+      xyz="0.020939 0.45806 -0.14839"
+      rpy="1.5708 0 0" />
+    <parent
+      link="body" />
+    <child
+      link="RealSence_F" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="RealSence_B">
+    <inertial>
+      <origin
+        xyz="-0.0220687307886732 0.0467473259498581 0.378467842288961"
+        rpy="0 0 0" />
+      <mass
+        value="0.0483821865502262" />
+      <inertia
+        ixx="4.5995702475578E-06"
+        ixy="1.59318993530729E-07"
+        ixz="4.42312632076694E-07"
+        iyy="2.99226494684879E-05"
+        iyz="-4.11068099558978E-08"
+        izz="2.98432126753058E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RealSence_B.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://mini/meshes/RealSence_B.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="RealSence_B_Joint"
+    type="fixed">
+    <origin
+      xyz="0.0209390044790954 -0.904272317630113 -0.30007590343112"
+      rpy="-0.872664626240902 0 0" />
+    <parent
+      link="body" />
+    <child
+      link="RealSence_B" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+</robot>

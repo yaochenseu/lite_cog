@@ -1,0 +1,77 @@
+<launch>
+    <!-- 相机竖放或平放 vertical or horizontal -->
+    <arg name="camera_pose" default="horizontal" />
+    <!-- 是否打开可视化界面Rviz --> 
+    <arg name="enable_rviz" default="true" />
+    <!-- 是否打开机器人urdf模型 -->
+    <arg name="enable_urdf" default="false" />
+    <!-- 是否在Rviz中显示足底轨迹 -->
+    <arg name="enable_joint_path" default="false" />
+    <!-- 是否打开运动传输程序 -->
+    <arg name="enable_transformer" default="false" />
+    <!-- 是否使用数据集运行（且没有相机tf） -->
+    <arg name="enable_camera_optical_tf" default="false" />
+    <!-- 是否打开地形图传输程序 -->
+    <arg name="enable_gridmap_transformer" default="false" />
+    <!-- 是否打开安全停避障 -->
+    <arg name="enable_safety" default="true" />
+    <!-- 是否计算四边形约束 -->
+    <arg name="enable_quadrangels" default="false" />
+
+    <!-- <env name="ROSCONSOLE_CONFIG_FILE" value="$(find deeprobotics_local_height_map)/config/setting.conf"/> -->
+
+    <group if="$(eval arg('camera_pose') == 'horizontal')">
+      <!-- 地形图 -->
+      <node pkg="deeprobotics_local_height_map" type="deeprobotics_local_height_map_for_safety" name="deeprobotics_local_height_map_for_safety" output="screen">
+        <rosparam command="load" file="$(find deeprobotics_local_height_map)/config/param_all_camera_h_safety.yaml" />
+      </node>
+      <!-- 发布静态TF变换 -->
+      <node pkg="tf2_ros" type="static_transform_publisher" name="base2camera" args="0.15 0.0 0 0 0.349 0 /base_link /camera_link" />
+    </group>
+
+    <group if="$(arg enable_safety)">
+      <!-- <node pkg="deeprobotics_local_height_map" name="vel_control_node" type="vel_control_node" output="screen">
+        <rosparam command="load" file="$(find deeprobotics_local_height_map)/config/control_x20.yaml" />
+      </node> -->
+      <node pkg="deeprobotics_local_height_map" name="safety_node" type="safety_node"  output="screen">
+        <rosparam command="load" file="$(find deeprobotics_local_height_map)/config/safety.yaml" />
+      </node>
+    </group>
+
+    <group if="$(arg enable_quadrangels)">
+      <node name="plane_seg" pkg="plane_seg_ros" type="plane_seg_ros" output="screen"> </node>
+    </group>
+
+    <!-- udp -->
+    <group if="$(arg enable_transformer)">
+      <include file="$(find message_transformer_cpp)/launch/message_transformer_cpp.launch" />
+    </group>
+    
+    <!-- 地形图传输程序 -->
+    <group if="$(arg enable_gridmap_transformer)">
+      <node pkg="deeprobotics_grid_map_transformer" type="grid_map_transform_app" name="grid_map_transform_app" />
+    </group>
+
+    <!--发布相机静态TF变换-->
+    
+    <!-- urdf -->
+    <group if="$(arg enable_urdf)">
+      <node pkg="tf2_ros" type="static_transform_publisher" name="base2urdf" args="0 0 0 0 0 0 /base_link /dummy" />
+      <param name="robot_description" textfile="$(find lite3)/Lite3/Lite3.urdf" />
+      <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+    </group>
+  
+
+    <!-- joint path -->
+    <group if="$(arg enable_joint_path)">
+      <node name="draw" pkg="deeprobotics_local_height_map" type="draw"  output="screen" />
+    </group>
+
+    <!-- RVIZ -->
+    <group if="$(arg enable_rviz)">
+      <!-- node name="rviz" pkg="rviz" type="rviz" args="-d $(find deeprobotics_local_height_map)/rviz/safety_control_assist.rviz" /-->
+    </group>
+
+</launch>
+
+

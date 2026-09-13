@@ -1,0 +1,6 @@
+float64 forward
+float64 left
+---
+bool success
+string message
+geometry_msgs/PoseStamped goal

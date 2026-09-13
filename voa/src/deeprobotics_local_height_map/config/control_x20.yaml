@@ -1,0 +1,48 @@
+forwardVelMax: 0.6
+backwardVelMax: 0.5
+pureSideVelMax: 0.2
+forwardSideVelMax: 0.2
+forwardSideVelMin: 0.1
+forwardSideVelCorrectWeight: 1.0
+yawVelMax: 0.45
+yVelThreshold: 0.45
+yRestDistanceThreshold: 0.36
+yFarWayThreshold: 0.35   #v0.45 h0.35
+ySafeManualdistanceThreshold: 0.15
+forwardVelIndex: 1.0
+yVelIndex: 1.0
+forwardVelBarrierSub: 0.5
+dynamicWeight: 0.2
+dynamicWeight2: 0.1
+forwardSideVelMaxWeight: 0.25
+yVelManualAddRate: 1.7
+yVelLookForFarWayRate: 2.0
+trotSlopeThreshold: 1.2
+
+xForwardStart: 0.4
+yLeftStart: 0.2
+yRightStart: -0.2
+xForwardEnd: 1.5
+sideEnd: 0.5
+yForwardEnd: 0.6
+forwardLength: 0.44
+backwardLength: 0.45   #足底到身体中心0.4
+backwardLength2: 0.55  #站立时大小腿连接处到身体中心为0.5
+wide: 0.26
+sideThreshold: 0.45
+frontStopThreshold: 0.65
+enableSlopeTrot: true
+
+usDistanceUpperThreshold: 1.5
+usDistanceLowerThreshold: 0.65
+backwardVelMin: 0.1
+
+robotFrame: "base_link"
+worldFrame: "world"
+
+
+
+
+
+
+

@@ -1,0 +1,2 @@
+vosk==0.3.45
+websockets==16.1.1

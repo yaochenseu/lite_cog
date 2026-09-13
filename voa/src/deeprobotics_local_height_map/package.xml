@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>deeprobotics_local_height_map</name>
+  <version>0.7.0</version>
+  <description>Generates an local height map from distance measurements and robot pose information.</description>
+  <maintainer email="ysc@deeprobotics.cn">ysc</maintainer>
+  <license>BSD</license>
+  <url type="website">http://deeprobotics.cn</url>
+  <url type="bugtracker">http://deeprobotics.cn/issues</url>
+  <author email="ysc@deeprobotics.cn">ysc</author>
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>roscpp</depend>
+  <depend>message_filters</depend>
+  <depend>pcl_ros</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>grid_map_core</depend>
+  <depend>grid_map_ros</depend>
+  <depend>grid_map_msgs</depend>
+  <depend>kindr</depend>
+  <depend>kindr_ros</depend>
+  <depend>tf</depend>
+  <depend>tf_conversions</depend>
+  <depend>eigen_conversions</depend>
+  <depend>boost</depend>
+  <depend>eigen</depend>
+</package>

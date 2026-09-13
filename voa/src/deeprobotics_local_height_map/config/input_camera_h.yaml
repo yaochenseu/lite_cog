@@ -1,0 +1,4 @@
+# topic
+point_cloud_topic: "/camera/depth/color/points"
+# frame
+sensor_frame_id1: "/camera_link"

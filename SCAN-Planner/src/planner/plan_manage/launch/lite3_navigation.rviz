@@ -1,0 +1,171 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+  - Class: rviz/Selection
+    Name: Selection
+  - Class: rviz/Tool Properties
+    Name: Tool Properties
+  - Class: rviz/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 0.5
+      Class: rviz/Grid
+      Color: 100; 100; 100
+      Enabled: true
+      Name: Ground Grid
+      Plane: XY
+      Plane Cell Count: 40
+      Reference Frame: odom
+      Value: true
+    - Alpha: 1
+      Class: rviz/RobotModel
+      Collision Enabled: false
+      Enabled: true
+      Name: Lite3 Robot
+      Robot Description: robot_description
+      TF Prefix: ""
+      Update Interval: 0
+      Visual Enabled: true
+      Value: true
+    - Angle Tolerance: 0.1
+      Class: rviz/Odometry
+      Color: 255; 170; 0
+      Enabled: true
+      Keep: 100
+      Length: 0.2
+      Name: Robot Odometry
+      Position Tolerance: 0.05
+      Topic: /leg_odom2
+      Value: true
+    - Alpha: 0.35
+      Autocompute Intensity Bounds: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
+      Color: 80; 180; 255
+      Color Transformer: AxisColor
+      Decay Time: 0.2
+      Enabled: true
+      Name: MID360 Raw Cloud
+      Position Transformer: XYZ
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 2
+      Size (m): 0.02
+      Style: Flat Squares
+      Topic: /rslidar_points
+      Unreliable: false
+      Use Fixed Frame: true
+      Value: true
+    - Alpha: 0.9
+      Autocompute Intensity Bounds: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
+      Color: 255; 70; 70
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: true
+      Name: Inflated Obstacles
+      Position Transformer: XYZ
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.05
+      Style: Flat Squares
+      Topic: /grid_map/occupancy_inflate
+      Unreliable: false
+      Use Fixed Frame: true
+      Value: true
+    - Class: rviz/Pose
+      Color: 255; 255; 0
+      Enabled: true
+      Head Length: 0.25
+      Head Radius: 0.08
+      Name: Commanded Goal
+      Shaft Length: 0.45
+      Shaft Radius: 0.04
+      Shape: Arrow
+      Topic: /move_base_simple/goal
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /scan_planner_node/goal_point
+      Name: Planner Goal
+      Namespaces: {}
+      Queue Size: 10
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /scan_planner_node/optimal_list
+      Name: Local Trajectory
+      Namespaces: {}
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /scan_planner_node/self_inflation
+      Name: Robot Safety Body
+      Namespaces: {}
+      Queue Size: 10
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /grid_map/sliding_map_bbox
+      Name: Local Map Boundary
+      Namespaces: {}
+      Queue Size: 10
+      Value: true
+    - Class: rviz/TF
+      Enabled: false
+      Frame Timeout: 15
+      Marker Scale: 0.3
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Update Interval: 0
+      Value: false
+  Enabled: true
+  Global Options:
+    Background Color: 25; 25; 25
+    Default Light: true
+    Fixed Frame: odom
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+    - Class: rviz/FocusCamera
+    - Class: rviz/Measure
+  Value: true
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 5
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.06
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.01
+      Pitch: 0.7
+      Target Frame: base_link
+      Yaw: 0.8
+Window Geometry:
+  Height: 900
+  Width: 1440
+  X: 40
+  Y: 40

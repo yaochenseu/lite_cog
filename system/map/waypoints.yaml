@@ -1,0 +1,62 @@
+# RViz-selected waypoints for lite3.yaml.
+# Pose waypoints can be sent as navigation goals directly. Point waypoints
+# require an orientation to be chosen before they are used for navigation.
+
+map: lite3.yaml
+frame_id: map
+
+waypoints:
+  hall:
+    type: pose
+    orientation_mode: fixed
+    position:
+      x: 3.114954948425293
+      y: -0.6512323021888733
+      z: 0.0
+    orientation:
+      x: 0.0
+      y: 0.0
+      z: -0.6695890347362244
+      w: 0.7427317985390226
+    yaw: -1.46731
+    yaw_degrees: -84.0707
+    source_topic: /move_base_simple/goal
+
+  room:
+    type: pose
+    orientation_mode: fixed
+    position:
+      x: 1.5889416933059692
+      y: -2.766062021255493
+      z: 0.0
+    orientation:
+      x: 0.0
+      y: 0.0
+      z: -0.9784718127465998
+      w: 0.20638050213230633
+    yaw: -2.72584
+    yaw_degrees: -156.179
+    source_topic: /move_base_simple/goal
+
+  door:
+    type: point
+    orientation_mode: any
+    position:
+      x: -0.5192999839782715
+      y: 0.43978065252304077
+      z: 0.005955696105957031
+    orientation: null
+    yaw: null
+    source_topic: /clicked_point
+
+ 
+  arm:
+    type: point
+    orientation_mode: any
+    position:
+      x: 4.363784313201904
+      y: -1.3484642505645752
+      z: -0.0004825592041015625
+    orientation: null
+    yaw: null
+    source_topic: /clicked_point 

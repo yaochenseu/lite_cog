@@ -1,0 +1,42 @@
+<launch>
+    <!-- 相机竖放或平放 vertical / horizontal_develop / horizontal_release_old / horizontal_release_new -->
+    <arg name="camera_pose" default="vertical" />
+
+    <!-- 水平朝下30度和水平朝上10度, 朝下相机居中安装 -->
+    <group if="$(eval arg('camera_pose') == 'horizontal_release_old')">
+      <node pkg="tf2_ros" type="static_transform_publisher" name="base2frontupcamera" args="0.4085 0.0475 0.0328 0 -0.17453 0 /base_link /camera_front_up_link" />
+      <node pkg="tf2_ros" type="static_transform_publisher" name="base2frontdowncamera" args="0.4033, 0.017, -0.01365 0 0.5236 0 /base_link /camera_front_down_link" />
+    </group>
+
+    <!-- 水平朝下30度和水平朝上10度, 朝下相机不居中安装 -->
+    <group if="$(eval arg('camera_pose') == 'horizontal_release_new')">
+      <node pkg="tf2_ros" type="static_transform_publisher" name="base2frontupcamera" args="0.4085 0.0475 0.0328 0 -0.17453 0 /base_link /camera_front_up_link" />
+      <node pkg="tf2_ros" type="static_transform_publisher" name="base2frontdowncamera" args="0.4033, 0.032, -0.01365 0 0.5236 0 /base_link /camera_front_down_link" />
+    </group>
+
+    <!-- 水平朝下20度和水平朝下60度 -->
+    <group if="$(eval arg('camera_pose') == 'horizontal_develop')">
+      <node pkg="tf2_ros" type="static_transform_publisher" name="base2frontupcamera" args="0.404 0.017 -0.025 0 0.34907 0 /base_link /camera_front_up_link" />
+      <node pkg="tf2_ros" type="static_transform_publisher" name="base2frontdowncamera" args="0.411 0.017 -0.003 0 1.0472 0 /base_link /camera_front_down_link" />
+    </group>
+
+    <group if="$(eval arg('camera_pose') == 'vertical')">
+      <!-- typec 朝下 -->
+      <node pkg="tf2_ros" type="static_transform_publisher" name="base2frontleftcamera" args="0.4233 0.04598 0.02223 0.6532815 0.0308436 -0.2705981 0.7064338 /base_link /camera_front_left_link" />
+      <node pkg="tf2_ros" type="static_transform_publisher" name="base2frontrightcamera" args="0.4233 -0.04598 0.02223 0.7064338 0.2705981 -0.0308436 0.6532815 /base_link /camera_front_right_link" />
+      <!-- typec 朝上 -->
+      <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="base2frontleftcamera" args="0.4093 0.0457 -0.0095 -0.7064338 0.2705981 0.0308436 0.6532815 /base_link /camera_front_left_link" />
+      <node pkg="tf2_ros" type="static_transform_publisher" name="base2frontrightcamera" args="0.4093 -0.0457 -0.0095 -0.6532815 0.0308436 0.2705981 0.7064338 /base_link /camera_front_right_link" /> -->
+    </group>
+
+    <!-- 后面相机向下30度 -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="base2backcamera" args="-0.4033 -0.017 -0.01365 -0.258819 0 0.9659258 0  /base_link /camera_back_link" />
+    <!-- 左边相机朝下30度 -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="base2leftcamera" args="-0.083 0.14256 0.10136 -0.1830127 0.1830127 0.6830127 0.6830127  /base_link /camera_left_link" />
+    <!-- 右边相机朝下30度 -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="base2rightcamera" args="-0.117 -0.14256 0.10136 0.1830127 0.1830127 -0.6830127 0.6830127  /base_link /camera_right_link" />
+    <!-- imu -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="base_link2imu" args="-0.1713 0 -0.05925 0 0 0 base_link imu" />
+</launch>
+
+

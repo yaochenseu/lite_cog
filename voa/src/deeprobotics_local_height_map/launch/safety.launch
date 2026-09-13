@@ -1,0 +1,9 @@
+
+<launch>
+    <node pkg="deeprobotics_local_height_map" name="safety_node" type="safety_node"  output="screen">
+      <rosparam command="load" file="$(find deeprobotics_local_height_map)/config/safety.yaml" />
+    </node>
+</launch>
+
+
+ 

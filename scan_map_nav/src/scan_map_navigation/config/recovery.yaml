@@ -1,0 +1,12 @@
+route_recovery:
+  shift_distance: 0.35
+  shift_yaw: 0.25
+  probe_horizon: 1.5
+  stable_duration: 1.0
+  stable_distance: 0.05
+  stable_yaw: 0.04
+  wait_timeout: 8.0
+  cooldown: 2.0
+  max_refreshes: 3
+  stopped_speed: 0.05
+  stopped_yaw_speed: 0.10

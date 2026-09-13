@@ -1,0 +1,29 @@
+# input    1: handle  2: navigation
+mode: 1
+# velocity  需要改动跟林强对接
+vel_x_max: 0.5
+vel_x_back_max: 0.5
+vel_y_max: 0.6
+vel_yaw_max: 1.2
+acc_x: 0.6
+acc_y: 0.5
+acc_yaw: 0.8
+# robot size
+len_base_front: 0.5
+len_base_back: 0.62
+len_base_side: 0.3
+# process rate
+rate: 50
+# predict
+predict_t_max: 2.6
+predict_dt: 0.01
+delay_t: 0.1
+# collision detect
+detect_dt: 0.2
+t_warn: 1.5
+t_warn2: 1.0
+vel_cost_weight: 1.0
+# brake mode  
+only_brake: false
+t_warn3: 1.8
+t_warn4: 1.0

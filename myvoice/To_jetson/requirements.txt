@@ -1,0 +1,2 @@
+-r Speech_to_Text/requirements.txt
+-r Text_to_Speech/requirements.txt

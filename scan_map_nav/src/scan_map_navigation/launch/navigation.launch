@@ -1,0 +1,31 @@
+<launch>
+  <arg name="map_dir" default="/home/ysc/lite_cog/system/map"/>
+  <arg name="map_name" default="lite3"/>
+  <arg name="rviz" default="true"/>
+  <arg name="localization" default="true"/>
+  <arg name="output_topic" default="/cmd_vel"/>
+  <arg name="init_x" default="0.0"/>
+  <arg name="init_y" default="0.0"/>
+  <arg name="init_z" default="0.0"/>
+  <arg name="init_yaw" default="0.0"/>
+  <include file="$(find scan_map_navigation)/launch/localization.launch" if="$(arg localization)">
+    <arg name="map_dir" value="$(arg map_dir)"/>
+    <arg name="map_name" value="$(arg map_name)"/>
+    <arg name="init_x" value="$(arg init_x)"/>
+    <arg name="init_y" value="$(arg init_y)"/>
+    <arg name="init_z" value="$(arg init_z)"/>
+    <arg name="init_yaw" value="$(arg init_yaw)"/>
+  </include>
+  <node pkg="scan_map_navigation" type="map_global_planner" name="scan_global" output="screen" required="true">
+    <rosparam command="load" file="$(find scan_map_navigation)/config/global.yaml"/>
+  </node>
+  <include file="$(find scan_map_navigation)/launch/scan_local.launch"/>
+  <node pkg="scan_map_navigation" type="navigator.py" name="scan_navigator" output="screen" required="true">
+    <rosparam command="load" file="$(find scan_map_navigation)/config/rolling.yaml"/>
+  </node>
+  <node pkg="scan_map_navigation" type="velocity_gate.py" name="scan_velocity_gate" output="screen" required="true">
+    <param name="output_topic" value="$(arg output_topic)"/>
+  </node>
+  <node pkg="rviz" type="rviz" name="scan_map_rviz" if="$(arg rviz)"
+        args="-d $(find scan_map_navigation)/config/navigation.rviz"/>
+</launch>

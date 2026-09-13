@@ -1,0 +1,76 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ''
+  Global Options:
+    Fixed Frame: map
+    Background Color: 35; 35; 35
+    Frame Rate: 20
+  Displays:
+    - Class: rviz/Map
+      Name: Static Map
+      Enabled: true
+      Topic: /map
+      Alpha: 0.7
+    - Class: rviz/TF
+      Name: Frames
+      Enabled: true
+      Show Names: true
+      Show Axes: true
+      Show Arrows: true
+    - Class: rviz/Axes
+      Name: Robot Direction
+      Enabled: true
+      Reference Frame: base_link
+      Length: 0.7
+      Radius: 0.03
+    - Class: rviz/Path
+      Name: Dijkstra Route
+      Enabled: true
+      Topic: /scan_global/path
+      Color: 255; 200; 0
+      Line Style: Lines
+      Line Width: 0.03
+    - Class: rviz/Path
+      Name: Stored Route in map
+      Enabled: true
+      Topic: /scan_map_nav/reference_path
+      Color: 0; 200; 255
+      Line Style: Lines
+    - Class: rviz/PointCloud2
+      Name: MID360
+      Enabled: true
+      Topic: /rslidar_points
+      Size (Pixels): 2
+      Style: Points
+      Color Transformer: FlatColor
+      Color: 255; 255; 255
+    - Class: rviz/Marker
+      Name: Rolling Local Target
+      Enabled: true
+      Marker Topic: /scan_map_nav/target_marker
+    - Class: rviz/Marker
+      Name: SCAN Footprint
+      Enabled: true
+      Marker Topic: /scan_local/self_inflation
+  Tools:
+    - Class: rviz/Interact
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+    - Class: rviz/SetInitialPose
+      Topic: /initialpose
+    - Class: rviz/SetGoal
+      Topic: /move_base_simple/goal
+    - Class: rviz/PublishPoint
+      Topic: /clicked_point
+  Views:
+    Current:
+      Class: rviz/TopDownOrtho
+      Target Frame: map
+      Scale: 65
+      X: 0
+      Y: 0
+Window Geometry:
+  Width: 1280
+  Height: 800

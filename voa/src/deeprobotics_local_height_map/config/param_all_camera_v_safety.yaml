@@ -1,0 +1,123 @@
+thread_number: 3
+# point_cloud_topic_lidar: "/rslidar_points"
+#point_cloud_topic: "/camera_front_left/depth/color/points"  
+point_cloud_topic2: "/camera/depth/color/points"
+#point_cloud_topic3: "/camera_back/depth/color/points"
+#point_cloud_topic4: "/camera_left/depth/color/points"
+#point_cloud_topic5: "/camera_right/depth/color/points"
+# imu_topic: "/imu/dataFromSerialPort"
+imu_topic: "/imu/data"
+
+map_frame_id: "world"
+robot_base_frame_id: "base_link"
+track_point_frame_id: "/base_link"  # The elevation map is moved along with the robot following a track point. This is the id of the tf frame in which the track point is defined
+
+track_point_x: 0.0
+track_point_y: 0.0
+track_point_z: 0.0
+min_update_rate: 0.5 #从机器人姿态估计的新测量值更新高程图的最小更新速率（以Hz为单位）
+time_tolerance: 0.5
+
+robot_motion_map_update/covariance_scale_translation_x: 0.0
+robot_motion_map_update/covariance_scale_translation_y: 0.0
+robot_motion_map_update/covariance_scale_translation_z: 0.0
+robot_motion_map_update/covariance_scale_rotation_x: 0.0
+robot_motion_map_update/covariance_scale_rotation_y: 0.0
+robot_motion_map_update/covariance_scale_rotation_z: 0.0
+
+length_in_x: 4.0   # The size (in m) of the elevation map.
+length_in_y: 4.0
+
+# 高程图中心的位置，在高程图框架中。 此参数设置生成的高程图与其发布的帧之间的平面位置偏移（map_frame_id）仅在未使用track_point_frame_id参数时才有用。
+position_x: 0.0
+position_y: 0.0
+resolution: 0.04 #The resolution (cell size in m/cell) of the elevation map.
+min_variance: 0.0001 #高程图方差数据的最小值和最大值。
+max_variance: 0.05
+mahalanobis_distance_threshold: 4 # 高程图中的每个单元格的高度值都存在不确定性。 根据现有高度分布的Mahalonobis距离和新测量值，输入数据与现有估计值融合，覆盖或忽略。 此参数确定马哈拉诺比斯距离的阈值，该阈值确定如何处理传入的测量。
+multi_height_noise: 0.01 # 噪声添加到高于该特定位置的当前高程图的测量值。 仅当点落在马哈拉诺比斯距离阈值上时才执行此噪声添加过程。 较高的值对于更快地适应动态环境（例如，移动物体）是有用的，但是可能在高度估计中引起更多噪声。
+fused_map_publishing_rate: 4 #The rate for publishing the entire (fused) elevation map.
+
+enable_visibility_cleanup: false
+visibility_cleanup_rate: 1.0
+
+clearHighGridDuration: 0.1
+
+# 地形图模式 1:利用状态估计位姿进行多帧点云建图  2:利用imu姿态把单帧点云转为地形图
+mapping_mode: 2
+enable_lidar: false
+enable_up_camera: false
+enable_down_camera: true
+enable_back_camera: false
+enable_left_camera: false
+enable_right_camera: false
+forward_start_distance: 0.7
+
+# 使用场景 1:普通  2:工业楼梯
+addPointMethod: 1
+
+# 高度层滤波
+height_filter: 0
+
+# 高度漂移补偿
+enable_height_drift_compensation: true
+drift_threshold: 0.04
+
+# 计算多边形支撑面
+publish_polygons: false
+
+# 可通行区域参数
+stand_height: 0.38      #mini站立高度：0.38    x20站立高度：0.48
+camera_angle: 25.0
+fov: 31.0
+x_camera_to_baselink: 0.321
+step_z_max: 0.04
+step_forward_max: 0.3
+slope_threshold: 0.839      #5cm分辨率：1.0    3cm分辨率：0.839
+slope_inflation: 1.1     #5cm分辨率：1.32   3cm分辨率：1.1
+slope_change: 0.0
+weight_side: 0.5
+slope_method: 1
+
+cost_mode: 2      #1：不打分  2：打分(cost越低越推荐踩)
+cost_wide: 4      #打分模式下，边缘格宽度cost_wide以内的可踩格要打分
+cost_slope_low_threshold: 0.5    #坡度值超过此阈值，将增加cost
+cost_slope_high_threshold: 0.839    #坡度值超过此阈值，将不再继续增加cost
+cost_slope_weight: 0.002
+cost_distance_weight: 0.02
+cost_max: 0.022
+
+# 颜色
+r1: 200
+g1: 50
+b1: 50
+r2: 255  #75
+g2: 255  #250
+b2: 255  #75
+r3: 50
+g3: 50
+b3: 200
+r4: 50
+g4: 50
+b4: 50
+
+enable_skip_lower_points: true
+scanning_duration: 0.033
+remove_penetrated_points_rate: 1.0
+
+# Written by Lefteris kotsonis.
+# Modeling Realsense D435 Sensor Noise for Improved 3D Reconstruction and Tracking.
+sensor_processor/type: structured_light
+# 距离传感器测量长度的最小值和最大值。 超出此间隔的测量值将被忽略。
+sensor_processor/cutoff_min_depth: 0.1
+sensor_processor/cutoff_max_depth: 2.2
+# 传感器噪声模型的数据。
+sensor_processor/normal_factor_a: 0.000611
+sensor_processor/normal_factor_b:  0.003587
+sensor_processor/normal_factor_c: 0.3515
+sensor_processor/normal_factor_d: 0
+sensor_processor/normal_factor_e: 1
+sensor_processor/lateral_factor: 0.01576
+
+sensor_processor/apply_voxelgrid_filter: false
+sensor_processor/voxelgrid_filter_size: 0.02

@@ -1,0 +1,28 @@
+global_costmap:
+  global_frame: map
+  robot_base_frame: base_link
+  transform_tolerance: 0.5
+  update_frequency: 2.0
+  publish_frequency: 1.0
+  rolling_window: false
+  track_unknown_space: true
+  footprint: [[-0.53, -0.35], [-0.53, 0.35], [0.53, 0.35], [0.53, -0.35]]
+  footprint_padding: 0.0
+  plugins:
+    - {name: static_layer, type: 'costmap_2d::StaticLayer'}
+    - {name: inflation_layer, type: 'costmap_2d::InflationLayer'}
+  static_layer: {map_topic: /map, subscribe_to_updates: true}
+  inflation_layer: {inflation_radius: 0.65, cost_scaling_factor: 5.0}
+GlobalPlanner:
+  old_navfn_behavior: false
+  use_quadratic: false
+  use_dijkstra: true
+  use_grid_path: false
+  allow_unknown: false
+  default_tolerance: 0.0
+  outline_map: false
+  lethal_cost: 253
+  neutral_cost: 50
+  cost_factor: 3.0
+  orientation_mode: 1
+  orientation_window_size: 1

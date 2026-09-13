@@ -1,0 +1,22 @@
+<launch>
+  <arg name="model_z" default="0.0"/>
+  <arg name="urdf_file" default="/home/ysc/lite_cog/voa/src/models/Lite3/Lite3/Lite3.urdf"/>
+  <arg name="rviz_config" default="$(find scan_planner)/launch/lite3_navigation.rviz"/>
+
+  <param name="robot_description" textfile="$(arg urdf_file)"/>
+
+  <!-- base_link follows the body-center odometry pose; no extra visual height is required. -->
+  <node pkg="tf" type="static_transform_publisher" name="lite3_visual_model_tf"
+        args="0 0 $(arg model_z) 0 0 0 base_link dummy 100"/>
+
+  <node pkg="robot_state_publisher" type="robot_state_publisher"
+        name="lite3_robot_state_publisher" output="screen">
+    <param name="publish_frequency" value="50.0"/>
+  </node>
+
+  <node pkg="rviz" type="rviz" name="lite3_navigation_rviz"
+        args="-d $(arg rviz_config)" output="screen">
+    <env name="ROS_PACKAGE_PATH"
+         value="/home/ysc/lite_cog/voa/src/models:$(optenv ROS_PACKAGE_PATH)"/>
+  </node>
+</launch>

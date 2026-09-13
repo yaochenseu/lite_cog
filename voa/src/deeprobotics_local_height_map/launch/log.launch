@@ -1,0 +1,6 @@
+<launch>
+
+    <env name="ROSCONSOLE_CONFIG_FILE"
+       value="$(find multi_camera_leg_feature_tracker)/../config/setting.conf"/>
+
+</launch>

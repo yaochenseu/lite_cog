@@ -1,0 +1,8 @@
+geometry_msgs/PoseStamped target_pose
+bool require_yaw
+---
+bool success
+string message
+---
+string state
+float64 distance_remaining

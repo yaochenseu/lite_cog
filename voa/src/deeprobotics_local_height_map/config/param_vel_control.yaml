@@ -1,0 +1,61 @@
+# camera0DepthTopic: "/camera_front_left/depth/image_rect_raw"
+# camera1DepthTopic: "/camera_front_right/depth/image_rect_raw" 
+zcMin: 100
+nearSize: 2
+cameraFrame0: "camera_link"
+# cameraFrame1: "camera_front_right_link"
+robotFrame: "base_link"
+worldFrame: "leg_odom"
+
+forwardVelMax: 0.6
+backwardVelMax: 0.6
+pureSideVelMax: 0.3
+forwardSideVelMax: 0.4
+forwardSideVelMin: 0.2
+forwardSideVelCorrectWeight: 1.0
+yawVelMax: 1.5
+yVelThreshold: 0.35
+yRestDistanceThreshold: 0.36
+yFarWayThreshold: 0.35   #v0.45 h0.35
+ySafeManualdistanceThreshold: 0.15
+forwardVelIndex: 1.0
+yVelIndex: 1.0
+forwardVelBarrierSub: 0.5
+dynamicWeight: 0.2
+dynamicWeight2: 0.1
+forwardSideVelMaxWeight: 0.25
+yVelManualAddRate: 1.7
+yVelLookForFarWayRate: 2.0
+
+xForwardStart: 0.22
+yLeftStart: 0.12
+yRightStart: -0.12
+xForwardEnd: 1.5
+sideEnd: 0.5
+yForwardEnd: 0.6
+forwardLength: 0.25
+backwardLength: 0.45
+wide: 0.2
+sideThreshold: 0.4
+frontStopThreshold: 0.35
+
+usDistanceUpperThreshold: 1.5
+usDistanceLowerThreshold: 0.5
+backwardVelMin: 0.1
+
+camera0_u0: 212
+camera0_v0: 120
+camera0_fx: 1.0
+camera0_fy: 1.0
+camera1_u0: 212
+camera1_v0: 120
+camera1_fx: 1.0
+camera1_fy: 1.0
+
+
+
+
+
+
+
+

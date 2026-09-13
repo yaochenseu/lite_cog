@@ -1,0 +1,4 @@
+<launch>
+<node pkg="deeprobotics_grid_map_transformer_old" type="grid_map_transform_app_old" name="grid_map_transform_app" />
+
+</launch>

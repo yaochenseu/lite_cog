@@ -1,0 +1,10 @@
+<launch>
+  <node name="plane_seg" pkg="plane_seg_ros" type="plane_seg_ros" output="screen">
+    <!-- <remap from="/plane_seg/pose" to="/state_estimator/pose_in_odom"/> -->
+    <param name="/run_test_program" value="false" />
+  </node>
+
+  <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="base2frontcamera" args="0.34182 0 0 0 0 0 /base_link /camera_front_link" /> -->
+
+  <!-- <node name="rviz" pkg="rviz" type="rviz" args="-d $(find deeprobotics_local_height_map)/rviz/height_map_camera.rviz" /> -->
+</launch>

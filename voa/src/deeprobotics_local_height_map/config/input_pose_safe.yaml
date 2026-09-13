@@ -1,0 +1,7 @@
+# topic
+robot_pose_with_covariance_topic: "/leg_odom_1"
+robot_pose_cache_size: 200   # 机器人位姿缓存的大小
+# frame
+map_frame_id: "leg_odom"
+robot_base_frame_id: "base_link"
+track_point_frame_id: "/base_link"  # The elevation map is moved along with the robot following a track point. This is the id of the tf frame in which the track point is defined

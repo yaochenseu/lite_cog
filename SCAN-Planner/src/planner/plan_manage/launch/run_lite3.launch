@@ -1,0 +1,171 @@
+<launch>
+  <!-- Lite3 + Livox MID360 real-robot, mapless local navigation. -->
+  <arg name="body_pose_topic" default="/leg_odom2"/>
+  <arg name="sensor_pose_topic" default="/scan_lite3/lidar_odom"/>
+  <arg name="cloud_topic" default="/rslidar_points"/>
+
+  <!-- Fixed goal: generated once from current odom when /lite3_fixed_forward_goal/send_goal is called. -->
+  <arg name="goal_distance" default="1.0"/>
+  <arg name="max_relative_goal_distance" default="5.0"/>
+  <arg name="auto_send_goal" default="false"/>
+  <arg name="show_rviz" default="false"/>
+
+  <!-- Conservative first-run limits. Increase only after odom, lidar and stop behavior are verified. -->
+  <arg name="max_vel" default="0.35"/>
+  <arg name="max_vy" default="0.25"/>
+  <arg name="max_reverse_vel" default="0.18"/>
+  <arg name="max_acc" default="0.4"/>
+  <arg name="max_vyaw" default="0.8"/>
+  <arg name="planning_horizon" default="1.5"/>
+  <arg name="recovery_enabled" default="true"/>
+  <arg name="recovery_trigger_fail_count" default="8"/>
+  <arg name="recovery_max_attempts" default="2"/>
+  <arg name="recovery_distance" default="0.8"/>
+  <arg name="recovery_waypoint_spacing" default="0.25"/>
+  <arg name="recovery_goal_tolerance" default="0.18"/>
+  <arg name="occupancy_decay_time" default="2.0"/>
+  <arg name="occupancy_decay_check_interval" default="0.2"/>
+  <arg name="occupancy_decay_cloud_timeout" default="0.5"/>
+  <arg name="obstacles_inflation_z_up" default="0.25"/>
+  <arg name="obstacles_inflation_z_down" default="0.20"/>
+
+  <!-- MID360 rigid transform from the body-center odometry pose. -->
+  <arg name="lidar_x" default="0.187"/>
+  <arg name="lidar_y" default="0.0"/>
+  <arg name="lidar_z" default="0.073"/>
+  <arg name="lidar_roll_deg" default="0.0"/>
+  <arg name="lidar_pitch_deg" default="18.0"/>
+  <arg name="lidar_yaw_deg" default="0.0"/>
+
+  <param name="body_pose_topic" value="$(arg body_pose_topic)" type="str"/>
+
+  <node pkg="scan_planner" name="lite3_lidar_pose_adapter" type="lite3_lidar_pose_adapter" output="screen">
+    <param name="body_odom_topic" value="$(arg body_pose_topic)" type="str"/>
+    <param name="sensor_pose_topic" value="$(arg sensor_pose_topic)" type="str"/>
+    <param name="frame_id" value="odom" type="str"/>
+    <param name="child_frame_id" value="rslidar" type="str"/>
+    <param name="extrinsic_x" value="$(arg lidar_x)" type="double"/>
+    <param name="extrinsic_y" value="$(arg lidar_y)" type="double"/>
+    <param name="extrinsic_z" value="$(arg lidar_z)" type="double"/>
+    <param name="extrinsic_roll_deg" value="$(arg lidar_roll_deg)" type="double"/>
+    <param name="extrinsic_pitch_deg" value="$(arg lidar_pitch_deg)" type="double"/>
+    <param name="extrinsic_yaw_deg" value="$(arg lidar_yaw_deg)" type="double"/>
+  </node>
+
+  <node pkg="scan_planner" name="lite3_fixed_forward_goal" type="lite3_fixed_forward_goal" output="screen">
+    <param name="odom_topic" value="$(arg body_pose_topic)" type="str"/>
+    <param name="goal_topic" value="/move_base_simple/goal" type="str"/>
+    <param name="goal_frame_id" value="odom" type="str"/>
+    <param name="distance" value="$(arg goal_distance)" type="double"/>
+    <param name="max_relative_distance" value="$(arg max_relative_goal_distance)" type="double"/>
+    <param name="auto_send" value="$(arg auto_send_goal)" type="bool"/>
+    <param name="auto_send_delay" value="1.0" type="double"/>
+  </node>
+
+  <node pkg="scan_planner" name="scan_planner_node" type="scan_planner_node" output="screen" clear_params="true">
+    <remap from="/grid_map/body_pose" to="$(arg body_pose_topic)"/>
+    <remap from="/grid_map/sensor_pose" to="$(arg sensor_pose_topic)"/>
+    <remap from="/grid_map/cloud" to="$(arg cloud_topic)"/>
+
+    <!-- SCAN input selection -->
+    <param name="grid_map/sensor_type" value="lidar" type="str"/>
+    <param name="grid_map/cloud_is_world" value="false" type="bool"/>
+    <!-- We already publish the real lidar pose, so do not apply SCAN's hard-coded Go2 extrinsic. -->
+    <param name="grid_map/need_extrinsic" value="false" type="bool"/>
+
+    <!-- FSM: mode 1 subscribes /move_base_simple/goal. -->
+    <param name="fsm/navi_mode" value="1" type="int"/>
+    <param name="fsm/thresh_replan" value="0.6" type="double"/>
+    <param name="fsm/thresh_no_replan" value="0.10" type="double"/>
+    <param name="fsm/planning_horizon" value="$(arg planning_horizon)" type="double"/>
+    <param name="fsm/emergency_time_" value="0.6" type="double"/>
+    <param name="fsm/fail_safe" value="true" type="bool"/>
+    <param name="fsm/max_replan_fail_count" value="30" type="int"/>
+    <param name="fsm/recovery_enabled" value="$(arg recovery_enabled)" type="bool"/>
+    <param name="fsm/recovery_trigger_fail_count" value="$(arg recovery_trigger_fail_count)" type="int"/>
+    <param name="fsm/recovery_max_attempts" value="$(arg recovery_max_attempts)" type="int"/>
+    <param name="fsm/recovery_distance" value="$(arg recovery_distance)" type="double"/>
+    <param name="fsm/recovery_waypoint_spacing" value="$(arg recovery_waypoint_spacing)" type="double"/>
+    <param name="fsm/recovery_goal_tolerance" value="$(arg recovery_goal_tolerance)" type="double"/>
+    <param name="fsm/is_real_world" value="true" type="bool"/>
+
+    <!-- Sliding occupancy map in odom frame. -->
+    <param name="grid_map/frame_id" value="odom" type="str"/>
+    <param name="grid_map/sliding_map_frame_id" value="scan_sliding_map" type="str"/>
+    <param name="grid_map/ground_height" value="0.0" type="double"/>
+    <param name="grid_map/resolution" value="0.05" type="double"/>
+    <param name="grid_map/sliding_map_size_x" value="6.0" type="double"/>
+    <param name="grid_map/sliding_map_size_y" value="6.0" type="double"/>
+    <param name="grid_map/sliding_map_size_z" value="2.0" type="double"/>
+    <param name="grid_map/map_sliding_thresh" value="0.2" type="double"/>
+
+    <!-- Lite3 footprint approximation: 0.35m radius keeps about 5cm margin over body half width. -->
+    <param name="grid_map/double_cylinder_radius" value="0.35" type="double"/>
+    <param name="grid_map/double_cylinder_offset" value="0.18" type="double"/>
+    <!-- At body z~=0.327m this accepts obstacle returns at roughly 0.08..0.53m.
+         SCAN's names describe the direction an obstacle voxel is expanded:
+         z_up therefore controls the lower obstacle limit, and z_down the upper limit. -->
+    <param name="grid_map/obstacles_inflation_z_up" value="$(arg obstacles_inflation_z_up)" type="double"/>
+    <param name="grid_map/obstacles_inflation_z_down" value="$(arg obstacles_inflation_z_down)" type="double"/>
+
+    <!-- Local fusion -->
+    <param name="grid_map/p_hit" value="0.85" type="double"/>
+    <param name="grid_map/p_miss" value="0.30" type="double"/>
+    <param name="grid_map/p_min" value="0.12" type="double"/>
+    <param name="grid_map/p_max" value="0.98" type="double"/>
+    <param name="grid_map/p_occ" value="0.80" type="double"/>
+    <!-- Reject MID360 invalid returns encoded as finite (0,0,0) points. -->
+    <param name="grid_map/min_ray_length" value="0.15" type="double"/>
+    <param name="grid_map/max_ray_length" value="4.0" type="double"/>
+    <!-- Remove lidar endpoints not observed again for 2s. Decay pauses on lidar dropout. -->
+    <param name="grid_map/occupancy_decay_time" value="$(arg occupancy_decay_time)" type="double"/>
+    <param name="grid_map/occupancy_decay_check_interval" value="$(arg occupancy_decay_check_interval)" type="double"/>
+    <param name="grid_map/occupancy_decay_cloud_timeout" value="$(arg occupancy_decay_cloud_timeout)" type="double"/>
+    <param name="grid_map/vis_height" value="0.30" type="double"/>
+
+    <!-- Unused depth-camera parameters kept valid for shared code paths. -->
+    <param name="grid_map/cx" value="321.04638671875" type="double"/>
+    <param name="grid_map/cy" value="243.44969177246094" type="double"/>
+    <param name="grid_map/fx" value="387.229248046875" type="double"/>
+    <param name="grid_map/fy" value="387.229248046875" type="double"/>
+    <param name="grid_map/depth_filter_maxdist" value="3.0" type="double"/>
+    <param name="grid_map/depth_filter_mindist" value="0.3" type="double"/>
+    <param name="grid_map/depth_filter_margin" value="1" type="int"/>
+    <param name="grid_map/k_depth_scaling_factor" value="1000.0" type="double"/>
+    <param name="grid_map/skip_pixel" value="2" type="int"/>
+
+    <!-- Planner manager -->
+    <param name="manager/max_vel" value="$(arg max_vel)" type="double"/>
+    <param name="manager/max_acc" value="$(arg max_acc)" type="double"/>
+    <param name="manager/max_jerk" value="4.0" type="double"/>
+    <param name="manager/control_points_distance" value="0.2" type="double"/>
+    <param name="manager/feasibility_tolerance" value="0.5" type="double"/>
+    <param name="manager/planning_horizon" value="$(arg planning_horizon)" type="double"/>
+
+    <!-- Trajectory optimization -->
+    <param name="optimization/lambda_smooth" value="1.0" type="double"/>
+    <param name="optimization/lambda_collision" value="1.0" type="double"/>
+    <param name="optimization/lambda_feasibility" value="0.1" type="double"/>
+    <param name="optimization/lambda_fitness" value="1.0" type="double"/>
+    <param name="optimization/dist0" value="0.20" type="double"/>
+    <param name="optimization/max_vel" value="$(arg max_vel)" type="double"/>
+    <param name="optimization/vel_tolerance" value="1.0" type="double"/>
+    <param name="optimization/max_acc" value="$(arg max_acc)" type="double"/>
+    <param name="optimization/acc_tolerance" value="1.0" type="double"/>
+  </node>
+
+  <!-- Trajectory tracking: publishes /cmd_vel. -->
+  <param name="closed_loop_controller/time_forward" value="0.5" type="double"/>
+  <param name="closed_loop_controller/heading_error_threshold" value="0.55" type="double"/>
+  <param name="closed_loop_controller/kp_pos" value="0.8" type="double"/>
+  <param name="closed_loop_controller/kp_yaw" value="1.5" type="double"/>
+  <param name="closed_loop_controller/max_vx" value="$(arg max_vel)" type="double"/>
+  <param name="closed_loop_controller/prefer_forward_motion" value="true" type="bool"/>
+  <param name="closed_loop_controller/max_reverse_vx" value="$(arg max_reverse_vel)" type="double"/>
+  <param name="closed_loop_controller/max_vy" value="$(arg max_vy)" type="double"/>
+  <param name="closed_loop_controller/max_vyaw" value="$(arg max_vyaw)" type="double"/>
+  <param name="closed_loop_controller/finish_dist" value="0.12" type="double"/>
+  <node pkg="scan_planner" name="closed_loop_controller" type="closed_loop_controller" output="screen"/>
+
+  <include file="$(find scan_planner)/launch/rviz_lite3.launch" if="$(arg show_rviz)"/>
+</launch>

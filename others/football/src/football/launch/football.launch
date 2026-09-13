@@ -1,0 +1,41 @@
+<launch>
+
+    <!--
+    <node pkg="football" type="detect_ball" name="detect_ball" output="screen">
+        <param name="is_rtsp" value="true"/>
+        <param name="img_topic" value="/usb_cam/image_raw"/>
+        <param name="box_topic" value="/ball_track_box"/>
+        <param name="is_debug" value="true"/>
+        <param name="hsv_thresh_0_low" value="0"/>
+        <param name="hsv_thresh_0_high" value="20"/>
+        <param name="hsv_thresh_1_low" value="100"/>
+        <param name="hsv_thresh_1_high" value="255"/>
+        <param name="hsv_thresh_2_low" value="194"/>
+        <param name="hsv_thresh_2_high" value="255"/>
+        <param name="afa_thresh" value="0.75"/>
+        <param name="area_thresh" value="10"/>
+    </node>
+    -->
+
+    <node pkg="football" type="detect_ball" name="detect_ball_realsense" output="screen">
+        <param name="is_rtsp" value="false"/>
+        <param name="img_topic" value="/camera/color/image_raw"/>
+        <param name="box_topic" value="/ball_track_box_realsense"/>
+        <param name="is_debug" value="false"/>
+        <param name="hsv_thresh_0_low" value="149"/>
+        <param name="hsv_thresh_0_high" value="179"/>
+        <param name="hsv_thresh_1_low" value="190"/>
+        <param name="hsv_thresh_1_high" value="255"/>
+        <param name="hsv_thresh_2_low" value="190"/>
+        <param name="hsv_thresh_2_high" value="255"/>
+        <param name="afa_thresh" value="1.0"/>
+        <param name="area_thresh" value="10"/>
+    </node>
+
+    <node pkg="football" type="control_ball" name="control_ball" output="screen">
+        <param name="rotate_count" value="50"/>
+        <param name="close_count" value="60"/>
+        <param name="v_times" value="5"/>
+        <param name="r_times" value="9"/>        
+    </node>
+</launch>

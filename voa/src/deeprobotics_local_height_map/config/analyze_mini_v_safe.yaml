@@ -1,0 +1,12 @@
+# 可通行区域参数
+stand_height: 0.38
+camera_angle: 25.0
+fov: 31.0
+x_camera_to_baselink: 0.321
+step_z_max: 0.10
+step_forward_max: 0.2
+slope_threshold: 0.839   # method1:0.839    method2:0.577
+slope_inflation: 1.1
+slope_change: 0.02
+weight_side: 0.5
+slope_method: 1

@@ -1,0 +1,16 @@
+# ROS 编译产物
+build/
+devel/
+install/
+logs/
+
+# Python
+__pycache__/
+*.pyc
+
+# 备份文件
+*.bak_*
+*.bak
+
+# 安装包（视情况保留）
+deb/
