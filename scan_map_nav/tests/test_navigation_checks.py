@@ -243,6 +243,22 @@ class NavigationWiringTests(unittest.TestCase):
                 nav.lease(NavigationControl.TRACK)
         self.assertEqual(nav.control_intent.mode,NavigationControl.STOP)
 
+    def test_planner_timeout_is_shared_by_gate_and_controller(self):
+        launch=ET.parse(str(ROOT/'src/scan_map_navigation/launch/navigation.launch')).getroot()
+        self.assertEqual(launch.find("arg[@name='planner_timeout']").get('default'),'3.0')
+        p=launch.find("node[@name='scan_velocity_gate']/param[@name='planner_timeout']")
+        self.assertEqual((p.get('value'),p.get('type')),('$(arg planner_timeout)','double'))
+        inc=next(i for i in launch.findall('include') if i.get('file').endswith('/scan_local.launch'))
+        self.assertEqual(inc.find("arg[@name='planner_timeout']").get('value'),'$(arg planner_timeout)')
+        local=ET.parse(str(ROOT/'src/scan_map_navigation/launch/scan_local.launch')).getroot()
+        self.assertEqual(local.find("arg[@name='planner_timeout']").get('default'),'3.0')
+        p=local.find("param[@name='scan_controller/planner_timeout']")
+        self.assertEqual((p.get('value'),p.get('type')),('$(arg planner_timeout)','double'))
+        source=(ROOT/'src/scan_map_navigation/src/closed_loop_controller.cpp').read_text()
+        self.assertIn('nh.param("planner_timeout", planner_timeout, 3.0)',source)
+        self.assertIn('(ros::WallTime::now()-planner_received).toSec() > planner_timeout',source)
+        self.assertIn('(ros::WallTime::now()-gate_received).toSec() > 0.15',source)
+
     def test_recovery_ack_follows_both_resets(self):
         nav = self.lease_nav()
         nav.lease_request = LeaseRecovery(recovery_id=3,task_id=7,epoch=1)

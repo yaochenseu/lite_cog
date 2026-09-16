@@ -37,6 +37,7 @@ class GateTests(unittest.TestCase):
         g.last_fault = Mock()
         g.conflict = ''
         g.timeout = 0.7
+        g.planner_timeout = 3.0
         g.localization_timeout = 1.2
         g.min_inliers,g.max_error = 0.5,0.3
         g.command = VelocityCommand(epoch=0)
@@ -83,7 +84,7 @@ class GateTests(unittest.TestCase):
 
     def test_stale_planner(self):
         m,_=self.g.inputs['planner']
-        self.g.inputs['planner']=(m,time.monotonic()-1)
+        self.g.inputs['planner']=(m,time.monotonic()-3.1)
         self.assertIn('Stale planner',self.g.healthy())
 
     def test_static_navigation_needs_no_runtime_grid(self):
@@ -94,7 +95,7 @@ class GateTests(unittest.TestCase):
         self.assertEqual(self.g.healthy(),'')
 
     def test_sensor_freshness_still_required_without_runtime_grid(self):
-        for key in ('cloud','odom','imu','ndt','execution'):
+        for key in ('cloud','odom','imu','ndt'):
             msg,received=self.g.inputs[key]
             self.g.inputs[key]=(msg,time.monotonic()-1.3)
             self.assertEqual(self.g.healthy(),'Stale '+key)
@@ -245,7 +246,7 @@ class GateTests(unittest.TestCase):
         self.g.task_lease_watchdog = False
         for key in ('cloud','odom','imu','planner','execution','ndt'):
             msg,received = self.g.inputs[key]
-            self.g.inputs[key] = msg,received-2
+            self.g.inputs[key] = msg,received-3.1
             self.assertEqual(self.g.healthy(),'Stale '+key)
             self.g.inputs[key] = msg,received
         self.g.inputs['ndt'][0].has_converged = False
@@ -394,8 +395,40 @@ class GateTests(unittest.TestCase):
 
     def test_stale_execution_state_remains_a_real_fault(self):
         msg,_ = self.g.inputs['execution']
-        self.g.inputs['execution'] = msg,time.monotonic()-1
+        self.g.inputs['execution'] = msg,time.monotonic()-3.1
         self.assertEqual(self.g.healthy(),'Stale execution')
+
+    def test_planner_and_execution_allow_three_seconds_without_revoking_task(self):
+        wall=time.monotonic()
+        with patch('velocity_gate.time.monotonic',return_value=wall):
+            for key in ('planner','execution'):
+                msg,received=self.g.inputs[key]
+                for age in (1.,2.99,3.):
+                    self.g.inputs[key]=msg,wall-age
+                    if hasattr(msg,'header'): msg.header.stamp=rospy.Time.from_sec(100-age)
+                    self.assertEqual(self.g.healthy(),'')
+                    self.assertTrue(self.g.refresh_health(self.g.healthy()))
+                    self.assertEqual(self.g.command_epoch,0)
+                self.g.inputs[key]=msg,received
+                if hasattr(msg,'header'): msg.header.stamp=rospy.Time.from_sec(100)
+
+    def test_execution_source_stamp_still_expires_with_fresh_receipt(self):
+        self.g.inputs['execution'][0].header.stamp=rospy.Time.from_sec(96.99)
+        self.assertEqual(self.g.healthy(),'Stale execution')
+
+    def test_three_second_planner_timeout_still_revokes_epoch(self):
+        self.g.refresh_health('')
+        msg,_=self.g.inputs['planner']
+        self.g.inputs['planner']=msg,time.monotonic()-3.01
+        self.assertFalse(self.g.refresh_health(self.g.healthy()))
+        self.assertEqual(self.g.command_epoch,1)
+
+    def test_sensor_point_eight_second_age_is_not_relaxed(self):
+        for key in ('cloud','odom','imu'):
+            msg,received=self.g.inputs[key]
+            self.g.inputs[key]=msg,time.monotonic()-.8
+            self.assertEqual(self.g.healthy(),'Stale '+key)
+            self.g.inputs[key]=msg,received
 
     def test_blocked_is_not_permission_to_replay_old_commands(self):
         self.valid_command()

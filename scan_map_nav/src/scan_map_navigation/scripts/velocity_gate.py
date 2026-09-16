@@ -53,6 +53,9 @@ class Gate:
         self.last_fault = rospy.Publisher('/scan_map_nav/last_fault', String, queue_size=10, latch=True)
         self.last_fault.publish(String(''))
         self.timeout = rospy.get_param('~sensor_timeout', 0.7)
+        self.planner_timeout = rospy.get_param('~planner_timeout', 3.0)
+        if not math.isfinite(self.planner_timeout) or self.planner_timeout <= 0:
+            raise ValueError('Invalid planner_timeout')
         self.localization_timeout = rospy.get_param('~localization_timeout', 1.2)
         if not math.isfinite(self.localization_timeout) or self.localization_timeout <= 0:
             raise ValueError('Invalid localization_timeout')
@@ -149,7 +152,7 @@ class Gate:
         if (self.lease_hold_ack and status is not None and
                 status[0].task_id == hold.task_id and status[0].epoch == hold.epoch and
                 status[0].generation > hold.generation and
-                fresh(status[1],status[0].header.stamp.to_sec(),wall,now,self.timeout) and not expired):
+                fresh(status[1],status[0].header.stamp.to_sec(),wall,now,self.planner_timeout) and not expired):
             # Reset proof + explicit acknowledgement. State/command generation
             # checks below still require a checked NEW trajectory before moving.
             self.command = None
@@ -181,7 +184,8 @@ class Gate:
                 return 'Waiting for '+key
             msg, received = self.inputs[key]
             stamp = msg.header.stamp.to_sec() if hasattr(msg, 'header') else now
-            if not fresh(received, stamp, wall, now, self.timeout):
+            limit = self.planner_timeout if key in ('planner','execution') else self.timeout
+            if not fresh(received, stamp, wall, now, limit):
                 return 'Stale '+key
         if 'ndt' not in self.inputs:
             return 'Waiting for ndt'

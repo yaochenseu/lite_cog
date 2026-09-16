@@ -32,6 +32,7 @@ scan_map_navigation::NavigationControl control;
 ros::WallTime control_received, gate_received;
 bool execution_allowed = false;
 bool task_lease_watchdog = false;
+double planner_timeout = 3.0;
 scan_map_navigation::PlannerState planner_state;
 ros::WallTime planner_received;
 uint64_t trajectory_generation = 0;
@@ -80,6 +81,12 @@ bool loadParams(const ros::NodeHandle &nh)
 {
   bool ok = true;
   nh.param("task_lease_watchdog", task_lease_watchdog, false);
+  nh.param("planner_timeout", planner_timeout, 3.0);
+  if (!std::isfinite(planner_timeout) || planner_timeout <= 0.0)
+  {
+    ROS_ERROR("[closed_loop_controller] invalid planner_timeout");
+    ok = false;
+  }
   ros::param::param<std::string>("/body_pose_topic", body_pose_topic, std::string("/quad_0/body_pose"));
   ok &= loadRequiredParam(nh, "time_forward", time_forward);
   ok &= loadRequiredParam(nh, "heading_error_threshold", heading_error_threshold);
@@ -239,7 +246,7 @@ void cmdCallback(const ros::TimerEvent &)
       (planner_state.state == scan_map_navigation::PlannerState::TRACKING &&
        receive_traj && trajectory_generation == planner_state.generation);
   if (!control.task_id || control.mode == scan_map_navigation::NavigationControl::STOP ||
-      !matching_state || !checked || (ros::WallTime::now()-planner_received).toSec() > 0.7 ||
+      !matching_state || !checked || (ros::WallTime::now()-planner_received).toSec() > planner_timeout ||
       control.header.stamp.isZero() || !std::isfinite(lease_age) || lease_age < -0.2 || lease_expired ||
       !execution_allowed || (ros::WallTime::now()-gate_received).toSec() > 0.15)
   {
