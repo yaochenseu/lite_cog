@@ -10,7 +10,7 @@ import rospy
 from geometry_msgs.msg import PoseStamped
 from scan_map_navigation.msg import NavigateGoal, NavigationControl, PlannerState
 from navigator import Navigator, TaskCancelled, LocalizationTimeout
-from rolling_route import OrderedRoute
+from rolling_route import OrderedRoute, GuideRecovery
 from localization_guard import LocalizationJumpGuard
 
 
@@ -135,6 +135,33 @@ class LocalRetryTests(unittest.TestCase):
             n.execute_attempt(goal,11.2)
         n.make_route.assert_called_once()
         self.assertIn('LOCAL_RETRY',[c.args[0].data for c in n.state.publish.call_args_list])
+
+    def test_relaxed_recovery_survives_static_rejection_and_reaches_endpoint_first(self):
+        n=self.nav;goal,route=self.execute_fixture()
+        n.visible=Mock(side_effect=lambda a,b,allow_occupied=False:
+                       allow_occupied or n.publish_target.call_count<3)
+        with self.assertRaisesRegex(RuntimeError,'Task deadline exceeded'):
+            n.execute_attempt(goal,12.)
+        n.make_route.assert_called_once()
+        points=[c.args[0][0] for c in n.publish_target.call_args_list]
+        self.assertEqual(points[:3],[.9,.9,.9])
+        self.assertEqual(points[3:6],[1.4,1.9,2.])
+        self.assertTrue(all(x==2. for x in points[5:]))
+        self.assertTrue(all(c.args[1] for c in n.publish_target.call_args_list[5:]))
+        states=[c.args[0].data for c in n.state.publish.call_args_list]
+        self.assertIn('TRY_ENDPOINT',states)
+        self.assertNotIn('REPLANNING_GLOBAL',states)
+
+    def test_failed_publish_workflow_does_not_commit_extension(self):
+        n=self.nav;goal,route=self.execute_fixture()
+        guide=GuideRecovery()
+        n.retry_local_target=Mock(side_effect=[((0,0,0),10.),((0,0,0),10.),RuntimeError('SCAN reset failed')])
+        with patch('navigator.GuideRecovery',return_value=guide):
+            with self.assertRaisesRegex(RuntimeError,'SCAN reset failed'):
+                n.execute_attempt(goal,12.)
+        self.assertIsNone(guide.active_arc)
+        self.assertAlmostEqual(guide.pending_arc,1.4)
+        n.publish_target.assert_called_once()
 
     def test_tracking_unchanged_target_does_not_resend_but_keeps_lease(self):
         n=self.nav; goal,route=self.execute_fixture(PlannerState.TRACKING)

@@ -395,7 +395,7 @@ class Navigator:
         if time.monotonic() >= deadline:
             raise RuntimeError('Task deadline exceeded')
 
-    def visible(self,a,b):
+    def visible(self,a,b,allow_occupied=False):
         # Goal-selection line-of-sight only, NOT a velocity/footprint check.
         grid = self.grid
         if (grid is None or grid.header.frame_id != 'map' or grid.info.resolution <= 0 or
@@ -413,9 +413,14 @@ class Navigator:
             if not 0 <= x < info.width or not 0 <= y < info.height:
                 return False
             v = grid.data[y*info.width+x]
-            if v < 0 or v >= 65:
+            if v < 0 or (v >= 65 and not allow_occupied):
                 return False
         return True
+
+    def recovery_visible(self,a,b):
+        # Only for guides after three local failures: tolerate stale static
+        # occupancy, not unknown/map bounds. SCAN's live collision checks remain.
+        return self.visible(a,b,allow_occupied=True)
 
     def make_route(self,start,goal,deadline):
         self.check_task(deadline)
@@ -513,8 +518,9 @@ class Navigator:
             if distance(xy,anchor) > 0.08 or abs(angle(yaw-anchor[2])) > 0.12:
                 last_progress,anchor = now,(xy[0],xy[1],yaw)
             local = self.local_state()
-            guides.observe_motion(transform_point(transform,xy),
-                                  local is not None and local.state == PlannerState.TRACKING)
+            if guides.observe_motion(transform_point(transform,xy),
+                                     local is not None and local.state == PlannerState.TRACKING):
+                rospy.loginfo('Guide failure count reset: TRACKING odom displacement reached %.2f m',self.guide_extension_motion)
             recovering = local is not None and local.state in (PlannerState.RECOVERING,PlannerState.BLOCKED)
             if recovering and recovery_generation != local.generation:
                 recovery_generation,recovery_started = local.generation,now
@@ -550,6 +556,13 @@ class Navigator:
                 # Only route invalidity/deviation requests another global path.
                 # Local blockage/no progress alone keeps the existing route.
                 choice,deviation = route.select(xy,self.visible)
+                choice,choice_arc = guides.choose(route,xy,choice,self.recovery_visible)
+                # A relaxed guide must not be replaced by normal static/corner
+                # checks on the next tick. During recovery keep an already sent
+                # guide through the first two retries, so counting can reach three.
+                if (choice is None and recovering and sent_point is not None and sent_arc is not None and
+                        sent_arc >= route.progress-1e-6 and self.recovery_visible(xy,sent_point)):
+                    choice,choice_arc = (sent_point,sent_final),sent_arc
                 if choice is None or deviation > 0.8:
                     self.stop()
                     if replans >= self.max_replans:
@@ -562,21 +575,25 @@ class Navigator:
                     recovery_generation = None
                     self.state.publish(String('REPLANNING_GLOBAL'))
                     continue
-                choice,choice_arc = guides.choose(route,xy,choice,self.visible)
                 failed_local = recovering and (local.state == PlannerState.BLOCKED or
                                                  now-recovery_started >= self.local_recovery_limit)
                 if failed_local or (not recovering and now-last_progress > self.stall_timeout):
                     point,final = (sent_point,sent_final) if sent_point is not None else choice
                     arc = sent_arc if sent_arc is not None else choice_arc
-                    if route.checked_target(xy,arc,self.visible) is None:
+                    active_recovery = guides.active_arc is not None and abs(arc-guides.active_arc) < 1e-6
+                    if not active_recovery and route.checked_target(xy,arc,self.visible) is None:
                         (point,final),arc = choice,choice_arc
                     label = 'LOCAL_RETRY'
-                    extended = guides.failed(route,xy,arc,self.visible)
+                    extended = guides.failed(route,xy,arc,self.recovery_visible)
                     if extended is not None:
                         (point,final),arc,extra = extended
-                        label = 'EXTENDING_TARGET +%.1fm' % extra
+                        label = 'TRY_ENDPOINT' if final else 'EXTENDING_TARGET +%.1fm' % extra
+                    rospy.logwarn('Guide recovery: failures=%d, guide_arc=%.2f, endpoint_arc=%.2f; %s',
+                                  guides.failures,arc,route.lengths[-1],guides.reason)
                     reason = local.reason if failed_local else 'No local motion progress'
                     sent_transform,sent_at = self.retry_local_target(point,final,deadline,reason,label)
+                    if extended is not None:
+                        guides.commit(arc)
                     sent_point,sent_final = point,final
                     sent_arc = arc
                     # retry_local_target already published a freshly checked target.

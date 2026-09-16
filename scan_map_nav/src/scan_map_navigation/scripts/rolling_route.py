@@ -127,7 +127,8 @@ class GuideRecovery:
 
     def reset_trials(self):
         self.failures = 0
-        self.base_arc = self.trial_arc = self.limit_arc = self.motion_anchor = None
+        self.base_arc = self.pending_arc = self.limit_arc = self.motion_anchor = None
+        self.reason = 'Waiting for failed local rounds'
 
     def observe_motion(self, odom_xy, tracking):
         # Continuous leg odometry, not a map/NDT correction or a TRACKING label.
@@ -138,33 +139,58 @@ class GuideRecovery:
             return True
         return False
 
-    def choose(self, route, robot, normal, visible):
+    def relaxed_target(self,route,robot,arc,allowed):
+        # A recovery guide is an intention, not a straight-line motion command.
+        # Keep path order and endpoint bounds; SCAN checks the REAL trajectory.
+        if arc < route.progress-1e-6 or arc > route.lengths[-1]+1e-6:
+            return None
+        point = route.at(arc)
+        if not allowed(robot,point):
+            return None
+        return point,arc >= route.lengths[-1]-1e-6
+
+    def choose(self, route, robot, normal, allowed):
         if self.active_arc is not None:
-            if route.selected_arc >= self.active_arc-1e-6:
+            if normal is not None and route.selected_arc >= self.active_arc-1e-6:
                 self.active_arc = None  # Catch-up alone is not proof of body movement.
             else:
-                candidate = route.checked_target(robot,self.active_arc,visible)
+                candidate = self.relaxed_target(route,robot,self.active_arc,allowed)
                 if candidate is not None:
                     return candidate,self.active_arc
-                self.active_arc = None  # Never retain a now-invalid target.
+                self.active_arc = None  # Unknown/out-of-map is still not permitted.
         return normal,route.selected_arc
 
-    def failed(self, route, robot, sent_arc, visible):
+    def failed(self, route, robot, sent_arc, allowed):
         self.failures += 1
         self.motion_anchor = self.last_odom
+        self.pending_arc = None
         if self.failures < self.threshold:
+            self.reason = 'Same guide until %d failed rounds (%d so far)' % (self.threshold,self.failures)
             return None
         if self.base_arc is None:
             self.base_arc = sent_arc
             # Freeze this episode's ceiling: map jitter cannot keep moving it away.
             self.limit_arc = min(route.lengths[-1],route.progress+self.max_ahead)
-        lower = max(sent_arc,self.active_arc if self.active_arc is not None else sent_arc,
-                    self.trial_arc if self.trial_arc is not None else sent_arc)
-        while lower < self.limit_arc-1e-6:
-            arc = min(self.limit_arc,lower+self.step)
-            self.trial_arc = lower = arc
-            candidate = route.checked_target(robot,arc,visible)
-            if candidate is not None:
-                self.active_arc = arc
-                return candidate,arc,arc-self.base_arc
-        return None  # Keep retrying the last valid target, without a global replan.
+        lower = max(sent_arc,self.active_arc if self.active_arc is not None else sent_arc)
+        endpoint = route.lengths[-1]
+        # If the existing guide already IS the endpoint, explicitly try it once
+        # in relaxed mode after the third failure. Never extrapolate beyond it.
+        endpoint_trial = lower >= endpoint-1e-6 and self.active_arc is None
+        if lower >= self.limit_arc-1e-6 and not endpoint_trial:
+            self.reason = 'Endpoint already active; retrying endpoint' if lower >= endpoint-1e-6 else 'Maximum guide distance reached; retrying current guide'
+            return None
+        arc = endpoint if endpoint_trial else min(self.limit_arc,lower+self.step)
+        candidate = self.relaxed_target(route,robot,arc,allowed)
+        if candidate is None:
+            self.reason = 'Recovery guide rejected: unknown/out-of-map or invalid path order; no advance consumed'
+            return None
+        self.pending_arc = arc
+        self.reason = ('Trying endpoint' if candidate[1] else 'Trying next %.2f m path step' % self.step) + '; static occupied cells/corner shortcut allowed, SCAN collision checks required'
+        return candidate,arc,max(0.,arc-self.base_arc)
+
+    def commit(self,arc):
+        # Only a target actually published by the manager consumes advancement.
+        if self.pending_arc is None or abs(arc-self.pending_arc) > 1e-6:
+            raise ValueError('No matching recovery guide proposal to commit')
+        self.active_arc = arc
+        self.pending_arc = None

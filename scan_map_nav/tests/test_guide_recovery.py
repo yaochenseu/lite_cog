@@ -18,8 +18,11 @@ class GuideRecoveryTests(unittest.TestCase):
         self.guide=GuideRecovery()
         self.guide.observe_motion((0,0),False)
 
-    def fail(self,arc=2.):
-        return self.guide.failed(self.route,(0,0),arc,self.visible)
+    def fail(self,arc=2.,commit=True):
+        result=self.guide.failed(self.route,(0,0),arc,self.visible)
+        if result is not None and commit:
+            self.guide.commit(result[1])
+        return result
 
     def test_third_failed_round_extends_then_one_half_metre_per_failure(self):
         self.assertIsNone(self.fail()); self.assertIsNone(self.fail())
@@ -39,17 +42,47 @@ class GuideRecoveryTests(unittest.TestCase):
         self.assertEqual(choice[0],self.route.at(2.5))
         self.assertAlmostEqual(arc,2.5)
 
-    def test_right_angle_is_not_cut_to_reach_extension(self):
+    def test_third_failure_allows_guide_around_corner_but_normal_selection_stays_strict(self):
         self.route=OrderedRoute([(0,0),(2,0),(2,6)],lookahead=2.)
         self.route.select((0,0))
         self.fail(); self.fail()
-        self.assertIsNone(self.fail())
-        self.assertIsNone(self.guide.active_arc)
+        candidate,arc,_=self.fail()
+        self.assertEqual(candidate,((2.,.5),False))
+        self.assertEqual(arc,2.5)
+        normal,_=self.route.select((0,0))
+        self.assertEqual(normal[0],(2.,0.))
+        self.assertIsNone(self.route.checked_target((0,0),arc))
+        self.assertEqual(self.guide.choose(self.route,(0,0),normal,self.visible),(candidate,arc))
 
-    def test_invisible_stages_skipped_without_publishing_them(self):
-        self.visible=lambda a,b: b[0]>3.1
+    def test_rejected_candidate_does_not_consume_steps_and_can_be_retried(self):
+        self.visible=lambda a,b: False  # Unknown/out-of-map after relaxing static occupancy.
         self.fail(); self.fail()
-        self.assertAlmostEqual(self.fail()[1],3.5)
+        self.assertIsNone(self.fail()); self.assertIsNone(self.fail())
+        self.assertIsNone(self.guide.active_arc)
+        self.assertIsNone(self.guide.pending_arc)
+        self.visible=lambda a,b: True
+        self.assertAlmostEqual(self.fail()[1],2.5)
+
+    def test_proposal_is_not_advancement_until_published(self):
+        self.fail(); self.fail()
+        result=self.fail(commit=False)
+        self.assertEqual(result[1],2.5)
+        self.assertIsNone(self.guide.active_arc)
+        self.assertEqual(self.fail(commit=False)[1],2.5)
+        with self.assertRaises(ValueError): self.guide.commit(3.)
+        self.guide.commit(2.5)
+        self.assertEqual(self.fail(2.5)[1],3.)
+
+    def test_relaxed_guide_survives_missing_normal_static_choice(self):
+        self.fail();self.fail();result=self.fail()
+        self.route.selected_arc=None
+        self.assertEqual(self.guide.choose(self.route,(0,0),None,self.visible),(result[0],result[1]))
+
+    def test_relaxed_guide_still_rejects_unknown_or_out_of_map(self):
+        self.fail();self.fail();self.fail()
+        self.route.selected_arc=None
+        self.assertEqual(self.guide.choose(self.route,(0,0),None,lambda a,b:False),(None,None))
+        self.assertIsNone(self.guide.active_arc)
 
     def test_goal_clamping_never_overshoots_or_repeats_same_trial(self):
         self.route=OrderedRoute([(0,0),(3.2,0)],lookahead=2.)
@@ -66,8 +99,12 @@ class GuideRecoveryTests(unittest.TestCase):
     def test_already_final_guide_does_not_extend(self):
         self.route=OrderedRoute([(0,0),(1.2,0)],lookahead=2.)
         self.route.select((0,0))
-        for _ in range(5): self.assertIsNone(self.fail(1.2))
-        self.assertIsNone(self.guide.active_arc)
+        for _ in range(2): self.assertIsNone(self.fail(1.2))
+        candidate,arc,extra=self.fail(1.2)
+        self.assertEqual(candidate,((1.2,0.),True))
+        self.assertEqual((arc,extra),(1.2,0.))
+        for _ in range(3): self.assertIsNone(self.fail(1.2))
+        self.assertEqual(self.guide.active_arc,1.2)
 
     def test_hold_extended_target_until_normal_rolling_guide_catches_up(self):
         self.fail(); self.fail(); self.fail()
@@ -133,6 +170,7 @@ class GuideRecoveryTests(unittest.TestCase):
         current=4.
         for expected in (4.5,5.,5.5,6.,6.5,7.):
             _,current,_=self.guide.failed(self.route,(2.,0),current,self.visible)
+            self.guide.commit(current)
             self.assertAlmostEqual(current,expected)
         self.assertIsNone(self.guide.failed(self.route,(2.,0),current,self.visible))
 
@@ -258,6 +296,7 @@ class TwoMetreConfigTests(unittest.TestCase):
         current=2.
         for expected in (2.5,3.,3.5,4.,4.5,5.):
             _,current,_=guide.failed(route,(0,0),current,visible)
+            guide.commit(current)
             self.assertAlmostEqual(current,expected)
         self.assertIsNone(guide.failed(route,(0,0),current,visible))
 

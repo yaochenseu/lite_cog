@@ -158,6 +158,22 @@ class NavigationWiringTests(unittest.TestCase):
                     'target_resend','target_near_distance','guide_extension_offsets'):
             self.assertNotIn(key,config)
 
+    def test_recovery_visibility_allows_static_occupied_target_but_not_unknown_or_bounds(self):
+        nav=Navigator.__new__(Navigator)
+        grid=OccupancyGrid();grid.info.width=grid.info.height=20
+        grid.header.frame_id='map'
+        grid.info.resolution=.1;grid.info.origin.orientation.w=1
+        grid.data=[0]*400;nav.grid=grid
+        # Include an occupied goal cell, not just a wall on the connecting line.
+        grid.data[2*20+5]=100;grid.data[2*20+9]=100
+        self.assertFalse(nav.visible((.15,.25),(.95,.25)))
+        self.assertTrue(nav.recovery_visible((.15,.25),(.95,.25)))
+        grid.data[2*20+7]=-1
+        self.assertFalse(nav.recovery_visible((.15,.25),(.95,.25)))
+        self.assertFalse(nav.recovery_visible((.15,.25),(2.5,.25)))
+        nav.grid=None
+        self.assertFalse(nav.recovery_visible((.15,.25),(.95,.25)))
+
     def lease_nav(self):
         nav = Navigator.__new__(Navigator)
         nav.task_id,nav.task_epoch = 7,1

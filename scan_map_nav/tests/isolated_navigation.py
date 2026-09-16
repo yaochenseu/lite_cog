@@ -196,7 +196,7 @@ def main():
                      'rviz:=false','output_topic:=/test/cmd_vel','test_hooks:=true']
         # Existing recovery scenarios deliberately retain their opt-in watchdog.
         # lease_disabled omits the argument to test the production DEFAULT.
-        if scenario not in ('lease_disabled','guide_extension','jump_confirmation'):
+        if scenario not in ('lease_disabled','guide_extension','jump_confirmation','static_recovery'):
             launch_args.append('task_lease_watchdog:=true')
         launch=start(launch_args,'navigation')
         rospy.wait_for_service('/scan_global/make_plan',timeout=60)
@@ -324,6 +324,52 @@ def main():
                 print('PASS: poor NDT quality remains a hard stop with watchdog disabled',flush=True)
             assert '/ros2qnx' not in str(master.getSystemState('/test'))
             print('ALL %s TESTS PASSED (private master; no physical robot commands)'%scenario.upper(),flush=True)
+            return
+
+        if scenario=='static_recovery':
+            def map_point(msg):
+                c,s=math.cos(.3),math.sin(.3)
+                return (1+c*msg.position.x-s*msg.position.y,-.5+s*msg.position.x+c*msg.position.y)
+            assert rospy.get_param('/scan_navigator/guide_extension_failures')==3
+            assert rospy.get_param('/scan_navigator/task_lease_watchdog') is False
+            assert obstacle(True).success
+            send(-3.2,0)
+            wait_until(lambda: bool(state['targets']),15)
+            wait_until(lambda: bool(state['routes']),5)
+            task=state['targets'][-1].task_id;epoch=state['epoch']
+            route_count=len(state['routes'])
+            # The global route already exists. Mark future guide cells and its
+            # endpoint occupied in the static prior; real lidar still sees free space.
+            data=list(grid.data)
+            for j in range(47,54):
+                for i in range(15,28): data[j*100+i]=100
+            grid.data=data
+            map_pub.publish(grid)
+            wait_until(lambda: 'TRY_ENDPOINT' in state['history'],45)
+            wait_until(lambda: state['history'].count('LOCAL_RETRY')>=4,15)
+            assert not state['motion'],'SCAN-rejected candidates must never move'
+            assert state['epoch']==epoch
+            assert len(state['routes'])==route_count
+            targets=list(state['targets'])
+            points=[map_point(m) for m in targets]
+            advances=[]
+            for p in points:
+                if p[0]<-2.2 and (not advances or abs(p[0]-advances[-1])>.04):advances.append(p[0])
+            assert len(advances)==3,advances
+            assert all(abs(a-b)<.04 for a,b in zip(advances,(-2.5,-3.,-3.2))),advances
+            assert all(p[0]>=-3.21 for p in points),points
+            assert targets[-1].final_goal and all(m.task_id==task for m in targets)
+            assert grid.data[50*100+18]==100
+            assert state['history'].count('TRY_ENDPOINT')==1
+            assert 'REPLANNING_GLOBAL' not in state['history']
+            print('PASS: three failures permit static-occupied guides in 0.5m steps; endpoint wins before 5m, real SCAN rejection still stops motion',flush=True)
+            assert obstacle(False).success
+            assert client.wait_for_result(rospy.Duration(50))
+            assert client.get_state()==GoalStatus.SUCCEEDED,str(client.get_result())
+            assert state['targets'][-1].task_id==task and state['epoch']==epoch
+            assert len(state['routes'])==route_count
+            assert '/ros2qnx' not in str(master.getSystemState('/test'))
+            print('ALL STATIC RECOVERY TESTS PASSED: occupied prior endpoint reached only after checked SCAN trajectory (private master)',flush=True)
             return
 
         if scenario=='jump_confirmation':
@@ -481,7 +527,8 @@ def main():
             final_targets=state['targets'][final_index:]
             assert all(m.final_goal and math.hypot(map_point(m)[0]-endpoint[0],map_point(m)[1]-endpoint[1])<.01
                        for m in final_targets)
-            assert len([s for s in state['history'] if s.startswith('EXTENDING_TARGET')])==3
+            assert len([s for s in state['history'] if s.startswith('EXTENDING_TARGET')])==2
+            assert 'TRY_ENDPOINT' in state['history']
             assert obstacle(False).success
             assert client.wait_for_result(rospy.Duration(45))
             assert client.get_state()==GoalStatus.SUCCEEDED,str(client.get_result())
