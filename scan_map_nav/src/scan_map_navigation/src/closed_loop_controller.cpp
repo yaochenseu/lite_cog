@@ -31,6 +31,7 @@ ros::Publisher desired_pub;
 scan_map_navigation::NavigationControl control;
 ros::WallTime control_received, gate_received;
 bool execution_allowed = false;
+bool task_lease_watchdog = false;
 scan_map_navigation::PlannerState planner_state;
 ros::WallTime planner_received;
 uint64_t trajectory_generation = 0;
@@ -78,6 +79,7 @@ bool loadRequiredParam(const ros::NodeHandle &nh, const std::string &name, doubl
 bool loadParams(const ros::NodeHandle &nh)
 {
   bool ok = true;
+  nh.param("task_lease_watchdog", task_lease_watchdog, false);
   ros::param::param<std::string>("/body_pose_topic", body_pose_topic, std::string("/quad_0/body_pose"));
   ok &= loadRequiredParam(nh, "time_forward", time_forward);
   ok &= loadRequiredParam(nh, "heading_error_threshold", heading_error_threshold);
@@ -229,6 +231,8 @@ void recoveryStateCallback(const std_msgs::BoolConstPtr &msg)
 void cmdCallback(const ros::TimerEvent &)
 {
   const double lease_age = (ros::Time::now()-control.header.stamp).toSec();
+  const bool lease_expired = task_lease_watchdog &&
+      (lease_age > 0.5 || (ros::WallTime::now()-control_received).toSec() > 0.5);
   const bool matching_state = planner_state.task_id == control.task_id && planner_state.epoch == control.epoch;
   const bool checked = control.mode == scan_map_navigation::NavigationControl::ALIGN ?
       planner_state.state == scan_map_navigation::PlannerState::ALIGNING :
@@ -236,8 +240,7 @@ void cmdCallback(const ros::TimerEvent &)
        receive_traj && trajectory_generation == planner_state.generation);
   if (!control.task_id || control.mode == scan_map_navigation::NavigationControl::STOP ||
       !matching_state || !checked || (ros::WallTime::now()-planner_received).toSec() > 0.7 ||
-      lease_age < -0.2 || lease_age > 0.5 ||
-      (ros::WallTime::now()-control_received).toSec() > 0.5 ||
+      control.header.stamp.isZero() || !std::isfinite(lease_age) || lease_age < -0.2 || lease_expired ||
       !execution_allowed || (ros::WallTime::now()-gate_received).toSec() > 0.15)
   {
     publishExecutionFrozen(true);

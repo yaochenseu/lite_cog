@@ -12,6 +12,7 @@ from geometry_msgs.msg import PoseStamped
 from hdl_localization.msg import ScanMatchingStatus
 from std_msgs.msg import String
 from navigator import Navigator, LocalizationTimeout, TaskCancelled
+from localization_guard import LocalizationJumpGuard
 
 
 class LocalizationRetryTests(unittest.TestCase):
@@ -27,7 +28,7 @@ class LocalizationRetryTests(unittest.TestCase):
         n.server.is_active.return_value=True
         n.hard_fault_serial=n.hard_fault_baseline=0
         n.hard_fault_reason=''
-        n.last_fault=''; n.localization_anchor=None; n.last_remaining=2.
+        n.last_fault=''; n.jump_guard=LocalizationJumpGuard(); n.jump_resume_pending=False; n.last_remaining=2.
         n.task_timeout=30.; n.localization_retries=3
         n.localization_retry_wait=.02; n.localization_timeout=1.2
         n.jump_distance=.8; n.jump_yaw=.5
@@ -122,11 +123,20 @@ class LocalizationRetryTests(unittest.TestCase):
             n.wait_localization(time.monotonic()+1,rospy.Time.from_sec(100),'RECOVERY')
 
     def test_jump_during_recovery_not_hidden_by_retry(self):
-        n=self.nav; n.localization_anchor=(0,0,0)
-        robot=PoseStamped(); robot.header.stamp=rospy.Time.from_sec(100.1)
-        n.snapshot=Mock(return_value=(robot,(1,0,0),.327))
-        with self.assertRaisesRegex(RuntimeError,'localization jump'):
-            n.wait_localization(time.monotonic()+1,rospy.Time.from_sec(100),'RECOVERY')
+        n=self.nav
+        n.jump_guard.observe(1,(0,0,0),(0,0),None,0.)
+        now=[10.]
+        def sleep(dt): now[0]+=dt
+        def snapshot():
+            robot=PoseStamped(); robot.header.stamp=rospy.Time.from_sec(100+now[0])
+            n.ready_time=now[0]
+            return robot,(1,0,0),.327
+        n.snapshot=Mock(side_effect=snapshot); n.ready_time=10.
+        n.localization_retry_wait=1.
+        with patch('navigator.time.monotonic',side_effect=lambda:now[0]),patch('navigator.time.sleep',side_effect=sleep):
+            with self.assertRaisesRegex(RuntimeError,'localization jump'):
+                n.wait_localization(20,rospy.Time.from_sec(100),'RECOVERY')
+        self.assertGreaterEqual(n.jump_guard.bad_count,5)
 
     def test_tf_timeout_matches_ndt_not_other_sensor_timeout(self):
         n=self.nav; n.tf=Mock()

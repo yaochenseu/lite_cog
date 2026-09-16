@@ -31,6 +31,7 @@ class GateTests(unittest.TestCase):
         g.lease_hold_ack = False
         g.lease_hold_started = 0
         g.recovery_id = 0
+        g.task_lease_watchdog = True  # Existing recovery tests cover opt-in mode.
         g.lease_recovery_timeout = 2.0
         g.lease_request = Mock()
         g.last_fault = Mock()
@@ -206,6 +207,63 @@ class GateTests(unittest.TestCase):
         _,allowed,state = self.g.select_command(True)
         self.assertFalse(allowed)
         self.assertEqual(state,'Task lease invalid/expired')
+
+    def test_disabled_watchdog_allows_old_lease_without_resetting_task(self):
+        self.g.task_lease_watchdog = False
+        self.valid_command()
+        self.g.control_time -= 5
+        self.g.control.header.stamp = rospy.Time.from_sec(95)
+        self.assertEqual(self.g.healthy(),'')
+        self.assertIsNone(self.g.lease_hold)
+        self.g.lease_request.publish.assert_not_called()
+        cmd,allowed,state = self.g.select_command(True)
+        self.assertTrue(allowed)
+        self.assertEqual(state,'READY')
+        self.assertGreater(cmd.linear.x,0)
+        self.assertEqual(self.g.command_epoch,0)
+
+    def test_disabled_watchdog_still_honors_stop_and_task_identity(self):
+        self.g.task_lease_watchdog = False
+        self.valid_command()
+        self.g.control.mode = NavigationControl.STOP
+        self.assertFalse(self.g.select_command(True)[1])
+        self.g.control.mode = NavigationControl.TRACK
+        self.g.control.task_id = 2
+        self.assertFalse(self.g.select_command(True)[1])
+        self.g.control.task_id = 1
+        self.g.control.epoch = 1
+        self.assertFalse(self.g.select_command(True)[1])
+
+    def test_disabled_watchdog_still_rejects_invalid_control_timestamps(self):
+        self.g.task_lease_watchdog = False
+        self.valid_command()
+        for stamp in (0.,100.5):
+            self.g.control.header.stamp = rospy.Time.from_sec(stamp)
+            self.assertFalse(self.g.select_command(True)[1])
+
+    def test_disabled_watchdog_keeps_sensor_and_ndt_health_checks(self):
+        self.g.task_lease_watchdog = False
+        for key in ('cloud','odom','imu','planner','execution','ndt'):
+            msg,received = self.g.inputs[key]
+            self.g.inputs[key] = msg,received-2
+            self.assertEqual(self.g.healthy(),'Stale '+key)
+            self.g.inputs[key] = msg,received
+        self.g.inputs['ndt'][0].has_converged = False
+        self.assertEqual(self.g.healthy(),'NDT quality below threshold')
+
+    def test_disabled_watchdog_keeps_trajectory_and_velocity_checks(self):
+        self.g.task_lease_watchdog = False
+        self.valid_command()
+        status = self.g.inputs['execution'][0]
+        for state in (PlannerState.RECOVERING,PlannerState.BLOCKED):
+            status.state = state
+            self.assertFalse(self.g.select_command(True)[1])
+        status.state = PlannerState.TRACKING
+        status.generation += 1
+        self.assertFalse(self.g.select_command(True)[1])
+        status.generation -= 1
+        self.g.command_time -= .3
+        self.assertEqual(self.g.select_command(True)[2],'Controller command expired')
 
     def test_expired_active_lease_stops_but_preserves_task_epoch(self):
         self.g.refresh_health('')

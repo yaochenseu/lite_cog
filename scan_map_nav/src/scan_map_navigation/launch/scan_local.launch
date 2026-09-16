@@ -10,6 +10,7 @@
   <arg name="sensor_pose_topic" default="/scan_lite3/lidar_odom"/>
   <arg name="cloud_topic" default="/rslidar_points"/>
   <arg name="test_hooks" default="false"/>
+  <arg name="task_lease_watchdog" default="false"/>
 
   <!-- Conservative first-run limits. Increase only after odom, lidar and stop behavior are verified. -->
   <arg name="max_vel" default="0.35"/>
@@ -152,6 +153,7 @@
 
   <!-- Tracking publishes ONLY isolated /scan_map_nav/raw_cmd. -->
   <param name="scan_controller/time_forward" value="0.5" type="double"/>
+  <param name="scan_controller/task_lease_watchdog" value="$(arg task_lease_watchdog)" type="bool"/>
   <param name="scan_controller/heading_error_threshold" value="0.55" type="double"/>
   <param name="scan_controller/kp_pos" value="0.8" type="double"/>
   <param name="scan_controller/kp_yaw" value="1.5" type="double"/>

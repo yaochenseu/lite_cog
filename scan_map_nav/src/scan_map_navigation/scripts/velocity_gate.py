@@ -32,6 +32,9 @@ class Gate:
         self.lease_hold_ack = False
         self.lease_hold_started = 0.0
         self.recovery_id = 0
+        self.task_lease_watchdog = rospy.get_param('~task_lease_watchdog',False)
+        if type(self.task_lease_watchdog) is not bool:
+            raise ValueError('task_lease_watchdog must be a boolean')
         self.lease_recovery_timeout = rospy.get_param('~lease_recovery_timeout', 2.0)
         if not math.isfinite(self.lease_recovery_timeout) or self.lease_recovery_timeout <= 0:
             raise ValueError('Invalid lease_recovery_timeout')
@@ -111,6 +114,8 @@ class Gate:
 
     def lease_watchdog(self):
         """Soft timeout latches STOP; renewal alone NEVER releases an old spline."""
+        if not self.task_lease_watchdog:
+            return ''
         lease = self.control
         hold = self.lease_hold
         if hold is not None and (lease is None or lease.task_id != hold.task_id or
@@ -238,10 +243,11 @@ class Gate:
         if self.lease_hold is not None:
             return cmd, False, 'LEASE_RECOVERY: stopped, waiting for navigation reset'
         wall, now = time.monotonic(), rospy.Time.now().to_sec()
+        stamp = lease.header.stamp.to_sec()
         if (lease.header.frame_id != 'odom' or lease.epoch != self.command_epoch or
                 not lease.task_id or lease.mode not in (NavigationControl.TRACK,NavigationControl.ALIGN) or
-                not math.isfinite(lease.yaw) or
-                not fresh(self.control_time,lease.header.stamp.to_sec(),wall,now,0.5)):
+                not math.isfinite(lease.yaw) or not math.isfinite(stamp) or stamp <= 0 or now-stamp < -0.2 or
+                (self.task_lease_watchdog and not fresh(self.control_time,stamp,wall,now,0.5))):
             return cmd, False, 'Task lease invalid/expired'
         status = self.inputs['execution'][0]
         if (status.header.frame_id != 'odom' or status.task_id != lease.task_id or status.epoch != lease.epoch):

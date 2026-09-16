@@ -5,6 +5,8 @@
   <arg name="localization" default="true"/>
   <arg name="output_topic" default="/cmd_vel"/>
   <arg name="test_hooks" default="false"/>
+  <!-- Startup-only switch shared by manager, gate and controller. -->
+  <arg name="task_lease_watchdog" default="false"/>
   <arg name="localization_timeout" default="1.2"/>
   <arg name="localization_retries" default="3"/>
   <arg name="localization_retry_wait" default="3.0"/>
@@ -27,8 +29,10 @@
   </node>
   <include file="$(find scan_map_navigation)/launch/scan_local.launch">
     <arg name="test_hooks" value="$(arg test_hooks)"/>
+    <arg name="task_lease_watchdog" value="$(arg task_lease_watchdog)"/>
   </include>
   <node pkg="scan_map_navigation" type="navigator.py" name="scan_navigator" output="screen" required="true">
+    <param name="task_lease_watchdog" value="$(arg task_lease_watchdog)" type="bool"/>
     <rosparam command="load" file="$(find scan_map_navigation)/config/rolling.yaml"/>
     <param name="localization_timeout" value="$(arg localization_timeout)"/>
     <param name="localization_retries" value="$(arg localization_retries)"/>
@@ -36,6 +40,7 @@
     <param name="test_hooks" value="$(arg test_hooks)"/>
   </node>
   <node pkg="scan_map_navigation" type="velocity_gate.py" name="scan_velocity_gate" output="screen" required="true">
+    <param name="task_lease_watchdog" value="$(arg task_lease_watchdog)" type="bool"/>
     <param name="output_topic" value="$(arg output_topic)"/>
     <param name="lease_recovery_timeout" value="2.0"/>
     <param name="localization_timeout" value="$(arg localization_timeout)"/>

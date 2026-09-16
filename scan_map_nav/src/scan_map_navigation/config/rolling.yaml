@@ -6,17 +6,26 @@ target_step: 0.08
 correction_step: 0.08
 target_period: 0.05
 loop_period: 0.05
-# Single-update discontinuities, measured near the robot/active target.
+# Suspected discontinuities STOP immediately; only sustained fresh frames abort.
 jump_distance: 0.8
 jump_yaw: 0.5
+jump_confirm_frames: 5
+jump_confirm_time: 0.3
+jump_recover_frames: 3
+jump_recover_time: 0.15
+jump_hold_timeout: 2.0
 stall_timeout: 15.0
 max_replans: 2
 local_recovery_limit: 4.0
 # A local recovery budget exhaustion keeps the route and retries after STOP.
 local_retry_wait: 0.2
 guide_extension_failures: 3
-# Offsets from the original failed guide, measured ALONG the global path.
-guide_extension_offsets: [0.1, 0.2, 0.3, 0.4, 0.5]
+# Each failed round after the third advances by 0.5 m ALONG the global path.
+# Stop extending at the endpoint or 5 m ahead of the recovery-start progress.
+guide_extension_step: 0.5
+guide_extension_max_ahead: 5.0
+# Actual translation in continuous odom clears failures; keep the working guide.
+guide_extension_motion: 0.2
 lease_progress_timeout: 0.3
 xy_tolerance: 0.15
 yaw_tolerance: 0.12

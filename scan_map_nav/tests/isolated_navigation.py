@@ -66,7 +66,8 @@ def main():
         from sensor_msgs import point_cloud2
         from std_msgs.msg import Header,String
         from hdl_localization.msg import ScanMatchingStatus
-        from scan_map_navigation.msg import NavigateAction,NavigateGoal,LocalTarget,PlannerState,LocalTrajectory
+        from scan_map_navigation.msg import (NavigateAction,NavigateGoal,LocalTarget,PlannerState,
+                                            LocalTrajectory,NavigationControl,LeaseRecovery)
         from std_msgs.msg import UInt32
         from std_srvs.srv import SetBool
         from scan_map_navigation.srv import CheckPoses
@@ -82,7 +83,8 @@ def main():
                  'tf_offset':0.0,'wobble':False,'task':'','history':[],'routes':[],'targets':[],
                  'planner':None,'epoch':0,'reported_speed':None,'trajectories':[],
                  'extra_boxes':[],'samples':[],'target_observations':[],
-                 'ndt_publish':True,'ndt_age':0.0,'localization_tf':True}
+                 'ndt_publish':True,'ndt_age':0.0,'localization_tf':True,
+                 'control':None,'lease_requests':[]}
         def velocity(m):
             state['cmd'],state['cmd_time'] = m,time.monotonic()
             if abs(m.linear.x)+abs(m.linear.y)+abs(m.angular.z)>1e-4:
@@ -106,6 +108,10 @@ def main():
                          lambda m: state.update(epoch=m.data),queue_size=10)
         rospy.Subscriber('/scan_map_nav/local_trajectory',LocalTrajectory,
                          lambda m: state['trajectories'].append(m),queue_size=10)
+        rospy.Subscriber('/scan_map_nav/control',NavigationControl,
+                         lambda m: state.update(control=m),queue_size=1)
+        rospy.Subscriber('/scan_map_nav/lease_recovery',LeaseRecovery,
+                         lambda m: state['lease_requests'].append(m) if m.recovery_id else None,queue_size=10)
         grid = OccupancyGrid()
         grid.header.frame_id='map'
         grid.info.resolution=0.1
@@ -185,8 +191,14 @@ def main():
                 tick+=1
                 time.sleep(0.02)
         threading.Thread(target=sensors,daemon=True).start()
-        launch=start(['roslaunch','scan_map_navigation','navigation.launch','localization:=false',
-                      'rviz:=false','output_topic:=/test/cmd_vel','test_hooks:=true'],'navigation')
+        scenario=os.environ.get('SCAN_NAV_SCENARIO','')
+        launch_args=['roslaunch','scan_map_navigation','navigation.launch','localization:=false',
+                     'rviz:=false','output_topic:=/test/cmd_vel','test_hooks:=true']
+        # Existing recovery scenarios deliberately retain their opt-in watchdog.
+        # lease_disabled omits the argument to test the production DEFAULT.
+        if scenario not in ('lease_disabled','guide_extension','jump_confirmation'):
+            launch_args.append('task_lease_watchdog:=true')
+        launch=start(launch_args,'navigation')
         rospy.wait_for_service('/scan_global/make_plan',timeout=60)
         rospy.wait_for_service('/scan_local/check_poses',timeout=60)
         rospy.wait_for_service('/scan_local/test_obstacle',timeout=60)
@@ -222,14 +234,170 @@ def main():
         assert '/scan_map_nav/runtime_grid' not in published
         print('PASS: static latched map works without runtime-grid publishers or age refresh',flush=True)
 
+        if scenario in ('lease_disabled','lease_enabled'):
+            enabled=scenario=='lease_enabled'
+            for node in ('scan_navigator','scan_velocity_gate','scan_controller'):
+                assert rospy.get_param('/'+node+'/task_lease_watchdog') is enabled
+            def moving():
+                return math.hypot(state['cmd'].linear.x,state['cmd'].linear.y)>.04
+            def stopped():
+                return abs(state['cmd'].linear.x)+abs(state['cmd'].linear.y)+abs(state['cmd'].angular.z)<1e-6
+            send(-1.2,0)
+            wait_until(moving,20)
+            task_before=state['targets'][-1].task_id
+            epoch_before=state['epoch']
+            generation_before=state['planner'].generation
+            routes_before=len(state['routes'])
+            xy_before=(state['x'],state['y'])
+            assert stall(True).success
+            if enabled:
+                wait_until(lambda: state['gate'].startswith('LEASE_RECOVERY'),2)
+                wait_until(stopped,1)
+                time.sleep(.2)
+                assert stopped() and state['epoch']==epoch_before
+                assert stall(False).success
+                assert client.wait_for_result(rospy.Duration(35))
+                assert client.get_state()==GoalStatus.SUCCEEDED,str(client.get_result())
+                assert state['targets'][-1].task_id==task_before
+                assert len(state['routes'])==routes_before
+                assert 'LEASE_RECOVERY' in state['history']
+                assert any(m.task_id==task_before and m.generation>generation_before for m in state['trajectories'])
+                print('PASS: opt-in watchdog stops stalled task, then requires reset/new trajectory to resume',flush=True)
+            else:
+                time.sleep(1.2)  # Exceeds BOTH the former 0.3 and 0.5 s limits.
+                assert not state['lease_requests'],state['lease_requests']
+                assert 'LEASE_RECOVERY' not in state['history']
+                assert state['epoch']==epoch_before
+                assert state['planner'].generation==generation_before
+                assert (rospy.Time.now()-state['control'].header.stamp).to_sec()>.5
+                assert moving(),state['gate']
+                assert math.hypot(state['x']-xy_before[0],state['y']-xy_before[1])>.08
+                print('PASS: default-off watchdog permits checked trajectory with old lease stamp; no reset/epoch change',flush=True)
+                client.cancel_goal()  # Cancellation callbacks work despite the stalled loop.
+                assert client.wait_for_result(rospy.Duration(5))
+                assert client.get_state()==GoalStatus.PREEMPTED
+                wait_until(stopped,1)
+                assert stall(False).success
+                time.sleep(.3); assert stopped()
+                print('PASS: default-off mode still cancels and stops a stalled task',flush=True)
+
+                wait_until(lambda: state['gate']=='IDLE',3)
+                send(state['x']-.8,state['y'])
+                wait_until(moving,20)
+                epoch_before=state['epoch']
+                assert stall(True).success
+                state['cloud']=False
+                wait_until(lambda: state['epoch']>epoch_before,3)
+                wait_until(stopped,1)
+                assert stall(False).success
+                assert client.wait_for_result(rospy.Duration(5))
+                assert client.get_state()==GoalStatus.ABORTED,str(client.get_result())
+                assert 'Stale cloud' in client.get_result().message,str(client.get_result())
+                state['cloud']=True
+                wait_until(lambda: state['gate']=='IDLE',3)
+                time.sleep(.3); assert stopped()
+                print('PASS: cloud loss still stops/revokes a stalled task; recovery does not resume it',flush=True)
+
+                send(state['x']+.6,state['y'])
+                wait_until(moving,20)
+                assert obstacle(True).success
+                wait_until(lambda: state['planner'].state in (PlannerState.RECOVERING,PlannerState.BLOCKED),2)
+                wait_until(stopped,1)
+                time.sleep(.2); assert stopped()
+                client.cancel_goal()
+                assert client.wait_for_result(rospy.Duration(5))
+                assert client.get_state()==GoalStatus.PREEMPTED
+                assert obstacle(False).success
+                wait_until(lambda: state['gate']=='IDLE',3)
+                print('PASS: SCAN candidate rejection still stops motion with watchdog disabled',flush=True)
+
+                send(state['x']+.6,state['y'])
+                wait_until(moving,20)
+                state['ndt']=False
+                assert client.wait_for_result(rospy.Duration(5))
+                assert client.get_state()==GoalStatus.ABORTED,str(client.get_result())
+                assert 'NDT quality' in client.get_result().message,str(client.get_result())
+                wait_until(stopped,1)
+                state['ndt']=True
+                wait_until(lambda: state['gate']=='IDLE',3)
+                time.sleep(.3); assert stopped()
+                print('PASS: poor NDT quality remains a hard stop with watchdog disabled',flush=True)
+            assert '/ros2qnx' not in str(master.getSystemState('/test'))
+            print('ALL %s TESTS PASSED (private master; no physical robot commands)'%scenario.upper(),flush=True)
+            return
+
+        if scenario=='jump_confirmation':
+            assert rospy.get_param('/scan_global/global_costmap/inflation_layer/inflation_radius')==.30
+            assert rospy.get_param('/scan_navigator/jump_confirm_frames')==5
+            assert rospy.get_param('/scan_navigator/jump_recover_frames')==3
+            def moving():
+                return math.hypot(state['cmd'].linear.x,state['cmd'].linear.y)>.03
+            def stopped():
+                return abs(state['cmd'].linear.x)+abs(state['cmd'].linear.y)+abs(state['cmd'].angular.z)<1e-6
+            def holding():
+                return state['task']=='LOCALIZATION_JUMP_HOLD'
+            send(-1.2,0)
+            wait_until(moving,20)
+            task_before=state['targets'][-1].task_id;routes_before=len(state['routes'])
+            generation_before=state['planner'].generation;epoch_before=state['epoch']
+            state['tf_offset']=1.
+            wait_until(holding,2);wait_until(stopped,1)
+            targets_before=len(state['targets'])
+            assert client.get_state()==GoalStatus.ACTIVE
+            state['tf_offset']=0.
+            time.sleep(.05)
+            assert stopped() and len(state['targets'])==targets_before
+            assert client.wait_for_result(rospy.Duration(35))
+            assert client.get_state()==GoalStatus.SUCCEEDED,str(client.get_result())
+            assert state['targets'][-1].task_id==task_before and state['epoch']==epoch_before
+            assert len(state['routes'])==routes_before
+            assert any(t.task_id==task_before and t.generation>generation_before for t in state['trajectories'])
+            print('PASS: transient jump holds STOP; fresh normal frames resume SAME task/route on a new trajectory',flush=True)
+
+            send(state['x']+.7,state['y']);wait_until(moving,20)
+            state['tf_offset']=1.
+            wait_until(holding,2);wait_until(stopped,1)
+            targets_before=len(state['targets'])
+            assert client.wait_for_result(rospy.Duration(4))
+            assert client.get_state()==GoalStatus.ABORTED,str(client.get_result())
+            assert 'Persistent localization jump' in client.get_result().message,str(client.get_result())
+            assert len(state['targets'])==targets_before
+            state['tf_offset']=0.;time.sleep(.4);assert stopped()
+            print('PASS: permanent step cannot become a new baseline; multi-frame confirmation aborts without new target',flush=True)
+
+            send(state['x']+.7,state['y']);wait_until(moving,20)
+            state['tf_offset']=1.
+            wait_until(holding,2)
+            client.cancel_goal()
+            assert client.wait_for_result(rospy.Duration(4))
+            assert client.get_state()==GoalStatus.PREEMPTED
+            state['tf_offset']=0.;time.sleep(.4);assert stopped()
+            print('PASS: cancelling during jump confirmation prevents automatic resume',flush=True)
+
+            send(state['x']+.7,state['y']);wait_until(moving,20)
+            state['tf_offset']=1.
+            wait_until(holding,2)
+            state['ndt']=False
+            assert client.wait_for_result(rospy.Duration(4))
+            assert client.get_state()==GoalStatus.ABORTED,str(client.get_result())
+            assert 'NDT quality' in client.get_result().message,str(client.get_result())
+            state['tf_offset']=0.;state['ndt']=True;time.sleep(.4);assert stopped()
+            assert '/ros2qnx' not in str(master.getSystemState('/test'))
+            print('ALL JUMP CONFIRMATION TESTS PASSED (private master; no physical robot commands)',flush=True)
+            return
+
         if os.environ.get('SCAN_NAV_SCENARIO')=='guide_extension':
-            assert rospy.get_param('/scan_global/global_costmap/inflation_layer/inflation_radius')==.10
+            assert rospy.get_param('/scan_global/global_costmap/inflation_layer/inflation_radius')==.30
             assert rospy.get_param('/scan_navigator/lookahead')==2.
             assert rospy.get_param('/scan_navigator/target_period')==.05
             assert not rospy.has_param('/scan_navigator/target_resend')
             assert not rospy.has_param('/scan_navigator/target_near_distance')
             assert rospy.get_param('/scan_navigator/target_step')==.08
             assert rospy.get_param('/scan_navigator/local_retry_wait')==.2
+            assert rospy.get_param('/scan_navigator/guide_extension_step')==.5
+            assert rospy.get_param('/scan_navigator/guide_extension_max_ahead')==5.
+            assert rospy.get_param('/scan_navigator/guide_extension_motion')==.2
+            assert rospy.get_param('/scan_navigator/task_lease_watchdog') is False
             def map_point(msg):
                 c,s=math.cos(.3),math.sin(.3)
                 return (1+c*msg.position.x-s*msg.position.y,-.5+s*msg.position.x+c*msg.position.y)
@@ -237,7 +405,7 @@ def main():
             # Observe updates with a real running controller, before reaching
             # the previous guide (not just parameter assertions).
             start=len(state['target_observations'])
-            send(-3.2,0)
+            send(-2.,-3.)
             assert client.wait_for_result(rospy.Duration(45))
             assert client.get_state()==GoalStatus.SUCCEEDED,str(client.get_result())
             observations=state['target_observations'][start:]
@@ -254,18 +422,18 @@ def main():
             print('PASS: rolling targets update before reaching old guide; %d advances, first %.2fm early' %
                   (len(early),early[0]),flush=True)
 
-            # Reject all candidates while trying all five extensions. This
+            # Reject all candidates while trying the six half-metre extensions. This
             # verifies the protocol, not an assertion of real obstacle clearance.
             assert obstacle(True).success
             routes_before=len(state['routes']); targets_before=len(state['targets'])
             epoch_before=state['epoch']; state['motion']=False
-            # Longer than 2.5 m to exercise all five stages, toward the free
-            # map centre so this remains within the synthetic map bounds.
-            send(state['x']+3.,state['y'])
-            expected=['EXTENDING_TARGET +%.1fm'%v for v in (.1,.2,.3,.4,.5)]
+            # Six-metre free corridor, left of the wall, entirely inside the room.
+            recovery_origin=(state['x'],state['y'])
+            send(state['x'],state['y']+6.)
+            expected=['EXTENDING_TARGET +%.1fm'%v for v in (.5,1.,1.5,2.,2.5,3.)]
             limit=time.monotonic()+60
             while not all(label in state['history'] for label in expected):
-                assert time.monotonic()<limit,'Five extension stages not observed'
+                assert time.monotonic()<limit,'Half-metre extension stages not observed'
                 assert not state['motion'],'Rejected trajectory produced movement'
                 assert state['epoch']==epoch_before
                 assert 'REPLANNING_GLOBAL' not in state['history']
@@ -276,7 +444,9 @@ def main():
             assert state['history'][:first_extension].count('LOCAL_RETRY')==2
             indices=[state['history'].index(label) for label in expected]
             assert indices==sorted(indices)
-            wait_until(lambda: len(state['targets'])>targets_before+7,3)
+            # At 5 m, further failures must retry that point, not keep extending.
+            wait_until(lambda: state['history'].count('LOCAL_RETRY')>=4,15)
+            assert not state['motion']
             targets=state['targets'][targets_before:]
             task=targets[0].task_id
             base=map_point(targets[0]); distinct=[]
@@ -286,16 +456,55 @@ def main():
                 if offset>.04 and (not distinct or abs(offset-distinct[-1])>.04):
                     distinct.append(offset)
                 assert msg.task_id==task
-            assert len(distinct)==5,distinct
-            assert all(abs(actual-want)<.025 for actual,want in zip(distinct,(.1,.2,.3,.4,.5))),distinct
+            assert len(distinct)==6,distinct
+            assert all(abs(actual-want)<.04 for actual,want in zip(distinct,(.5,1.,1.5,2.,2.5,3.))),distinct
+            last=map_point(targets[-1])
+            assert 4.9<math.hypot(last[0]-recovery_origin[0],last[1]-recovery_origin[1])<=5.02
+            assert not targets[-1].final_goal
             assert obstacle(False).success
-            assert client.wait_for_result(rospy.Duration(50))
+            assert client.wait_for_result(rospy.Duration(65))
             assert client.get_state()==GoalStatus.SUCCEEDED,str(client.get_result())
             assert len(state['routes'])==routes_before+1
             assert state['targets'][-1].task_id==task
             assert state['epoch']==epoch_before
+            print('PASS: third failure starts 0.5m steps through 5m; capped retries keep SAME route/task, then reach goal',flush=True)
+
+            # Endpoint wins when it is nearer than the five-metre ceiling.
+            assert obstacle(True).success
+            targets_before=len(state['targets']); state['motion']=False
+            endpoint=(state['x'],state['y']-3.2)
+            send(*endpoint)
+            wait_until(lambda: len(state['targets'])>targets_before and state['targets'][-1].final_goal,35)
+            final_index=len(state['targets'])-1
+            wait_until(lambda: len(state['targets'])>final_index+1,10)
+            assert not state['motion']
+            final_targets=state['targets'][final_index:]
+            assert all(m.final_goal and math.hypot(map_point(m)[0]-endpoint[0],map_point(m)[1]-endpoint[1])<.01
+                       for m in final_targets)
+            assert len([s for s in state['history'] if s.startswith('EXTENDING_TARGET')])==3
+            assert obstacle(False).success
+            assert client.wait_for_result(rospy.Duration(45))
+            assert client.get_state()==GoalStatus.SUCCEEDED,str(client.get_result())
+            print('PASS: last half-metre step clamps to endpoint; subsequent failures do not extend beyond it',flush=True)
+
+            # Release rejection immediately after the first extension. Actual
+            # motion must stop the ladder, without snapping the useful guide back.
+            assert obstacle(True).success
+            send(state['x'],state['y']-3.)
+            wait_until(lambda: 'EXTENDING_TARGET +0.5m' in state['history'],25)
+            extended=state['targets'][-1]
+            extended_point=map_point(extended)
+            release_xy=(state['x'],state['y']); observations_start=len(state['target_observations'])
+            assert obstacle(False).success
+            wait_until(lambda: math.hypot(state['x']-release_xy[0],state['y']-release_xy[1])>.25,20)
+            for msg,x,y in state['target_observations'][observations_start:]:
+                if math.hypot(x-release_xy[0],y-release_xy[1])<.3:
+                    assert math.hypot(map_point(msg)[0]-extended_point[0],map_point(msg)[1]-extended_point[1])<.04
+            assert client.wait_for_result(rospy.Duration(45))
+            assert client.get_state()==GoalStatus.SUCCEEDED,str(client.get_result())
+            assert [s for s in state['history'] if s.startswith('EXTENDING_TARGET')]==['EXTENDING_TARGET +0.5m']
+            print('PASS: physical motion after first extension stops the ladder and retains the working guide',flush=True)
             assert '/ros2qnx' not in str(master.getSystemState('/test'))
-            print('PASS: after 3 failures try +0.1/+0.2/+0.3/+0.4/+0.5m on SAME route, then reach SAME goal',flush=True)
             print('ALL GUIDE EXTENSION TESTS PASSED (private master; no physical robot commands)',flush=True)
             return
 
@@ -334,7 +543,7 @@ def main():
 
         if os.environ.get('SCAN_NAV_SCENARIO')=='local_recovery':
             assert rospy.get_param('/scan_navigator/local_retry_wait')==.2
-            assert rospy.get_param('/scan_global/global_costmap/inflation_layer/inflation_radius')==.10
+            assert rospy.get_param('/scan_global/global_costmap/inflation_layer/inflation_radius')==.30
             persistent_local_retry(-.65)
 
             assert obstacle(True).success
@@ -381,7 +590,7 @@ def main():
         if os.environ.get('SCAN_NAV_SCENARIO')=='localization':
             assert rospy.get_param('/scan_velocity_gate/localization_timeout')==1.2
             assert rospy.get_param('/scan_navigator/localization_timeout')==1.2
-            assert rospy.get_param('/scan_global/global_costmap/inflation_layer/inflation_radius')==.10
+            assert rospy.get_param('/scan_global/global_costmap/inflation_layer/inflation_radius')==.30
             def stopped():
                 return abs(state['cmd'].linear.x)+abs(state['cmd'].linear.y)+abs(state['cmd'].angular.z)<1e-6
             def moving():

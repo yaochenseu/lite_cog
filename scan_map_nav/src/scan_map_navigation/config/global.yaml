@@ -14,7 +14,7 @@ global_costmap:
   static_layer: {map_topic: /map, subscribe_to_updates: true}
   # Total global inflation radius from occupied cells, NOT extra body padding.
   # SCAN keeps its original body dimensions and local collision checks.
-  inflation_layer: {inflation_radius: 0.10, cost_scaling_factor: 5.0}
+  inflation_layer: {inflation_radius: 0.30, cost_scaling_factor: 5.0}
 GlobalPlanner:
   old_navfn_behavior: false
   use_quadratic: false

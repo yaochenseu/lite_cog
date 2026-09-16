@@ -11,6 +11,7 @@ from geometry_msgs.msg import PoseStamped
 from scan_map_navigation.msg import NavigateGoal, NavigationControl, PlannerState
 from navigator import Navigator, TaskCancelled, LocalizationTimeout
 from rolling_route import OrderedRoute
+from localization_guard import LocalizationJumpGuard
 
 
 class LocalRetryTests(unittest.TestCase):
@@ -24,13 +25,19 @@ class LocalRetryTests(unittest.TestCase):
             replacement.start(); self.addCleanup(replacement.stop)
         n=self.nav=Navigator.__new__(Navigator)
         n.local_retry_wait=1.; n.last_remaining=2.
-        n.localization_anchor=(0,0,0); n.jump_distance=.8; n.jump_yaw=.5
+        n.jump_guard=LocalizationJumpGuard(); n.jump_resume_pending=False
+        n.jump_guard.observe(1,(0,0,0),(0,0),None,9.)
+        n.jump_distance=.8; n.jump_yaw=.5
         n.hard_fault_serial=n.hard_fault_baseline=0; n.hard_fault_reason=''
         n.server=Mock(); n.server.is_preempt_requested.return_value=False
         n.stop,n.state,n.clear_scan,n.publish_target,n.lease=Mock(),Mock(),Mock(),Mock(),Mock()
         n.check_task=lambda deadline: n.retry_guard(deadline)
         robot=PoseStamped(); robot.pose.orientation.w=1
         n.snapshot=Mock(return_value=(robot,(0,0,0),.327))
+        def snapshot():
+            robot.header.stamp=rospy.Time.from_sec(100+self.now)
+            return robot,(0,0,0),.327
+        n.snapshot.side_effect=snapshot
 
     def test_stop_wait_reset_and_retry_same_target_in_that_order(self):
         n=self.nav; events=[]
@@ -68,7 +75,10 @@ class LocalRetryTests(unittest.TestCase):
 
     def test_jump_during_wait_never_resumes(self):
         n=self.nav; robot=n.snapshot.return_value[0]
-        n.snapshot.side_effect=lambda: (robot,(1 if self.now>=10.2 else 0,0,0),.327)
+        def snapshot():
+            robot.header.stamp=rospy.Time.from_sec(100+self.now)
+            return robot,(1 if self.now>=10.2 else 0,0,0),.327
+        n.snapshot.side_effect=snapshot
         with self.assertRaisesRegex(RuntimeError,'localization jump'):
             n.retry_local_target((.9,0),False,20,'blocked')
         n.publish_target.assert_not_called(); n.lease.assert_not_called()
@@ -91,7 +101,8 @@ class LocalRetryTests(unittest.TestCase):
         n.xy_tolerance=.15; n.yaw_tolerance=.12; n.target_step=.18
         n.target_period=.3; n.correction_step=.08
         n.loop_period=.05
-        n.guide_extension_failures=3; n.guide_extension_offsets=[.1,.2,.3,.4,.5]
+        n.guide_extension_failures=3; n.guide_extension_step=.5
+        n.guide_extension_max_ahead=5.; n.guide_extension_motion=.2
         n.local_recovery_limit=4.; n.stall_timeout=.2; n.local_retry_wait=.2
         n.max_replans=0  # No global recovery allowance: local retries still work.
         n.visible=Mock(return_value=True); n.recover_lease=Mock(return_value=False)
@@ -111,8 +122,8 @@ class LocalRetryTests(unittest.TestCase):
         self.assertGreaterEqual(n.publish_target.call_count,3)
         targets=[c.args[0][0] for c in n.publish_target.call_args_list]
         self.assertEqual(targets[:3],[.9,.9,.9])
-        self.assertAlmostEqual(targets[3],1.)
-        self.assertLessEqual(max(targets),1.4)
+        self.assertAlmostEqual(targets[3],1.4)
+        self.assertLessEqual(max(targets),2.)
         states=[c.args[0].data for c in n.state.publish.call_args_list]
         self.assertIn('BLOCKED_WAIT',states); self.assertIn('LOCAL_RETRY',states)
         self.assertNotIn('REPLANNING_GLOBAL',states)
@@ -143,6 +154,44 @@ class LocalRetryTests(unittest.TestCase):
             n.execute_attempt(goal,20)
         self.assertEqual(n.make_route.call_count,2)
         n.publish_target.assert_not_called()
+
+    def jump_execution(self,permanent=False):
+        n=self.nav;goal,route=self.execute_fixture(PlannerState.TRACKING)
+        n.stall_timeout=15.
+        def snapshot():
+            robot=PoseStamped();robot.pose.orientation.w=1
+            robot.header.stamp=rospy.Time.from_sec(100+self.now)
+            bad=self.now>=10.2 and (permanent or self.now<10.31)
+            if self.now>=10.9 and not permanent: robot.pose.position.x=2.
+            return robot,(1. if bad else 0.,0.,0.),.327
+        n.snapshot.side_effect=snapshot
+        return goal,route
+
+    def test_transient_jump_keeps_route_and_finishes_with_fresh_target_only(self):
+        n=self.nav;goal,route=self.jump_execution()
+        n.execute_attempt(goal,15.)
+        n.server.set_succeeded.assert_called_once()
+        n.make_route.assert_called_once()
+        self.assertEqual(n.clear_scan.call_count,2)  # Task start + one suspect-jump reset.
+        self.assertEqual(n.publish_target.call_count,2)  # Same guide, new local trajectory after recovery.
+        self.assertTrue(all(c.args[2]==(0.,0.,0.) for c in n.publish_target.call_args_list))
+        self.assertIn('LOCALIZATION_JUMP_HOLD',[c.args[0].data for c in n.state.publish.call_args_list])
+        self.assertEqual(n.task_epoch,3)
+
+    def test_persistent_jump_in_execute_never_publishes_abnormal_target(self):
+        n=self.nav;goal,route=self.jump_execution(permanent=True)
+        with self.assertRaisesRegex(RuntimeError,'Persistent localization jump'):
+            n.execute_attempt(goal,15.)
+        n.publish_target.assert_called_once()
+        n.make_route.assert_called_once()
+        self.assertGreaterEqual(n.jump_guard.bad_count,5)
+
+    def test_cancel_during_jump_in_execute_cannot_resume_old_goal(self):
+        n=self.nav;goal,route=self.jump_execution(permanent=True)
+        n.server.is_preempt_requested.side_effect=lambda:self.now>=10.3
+        with self.assertRaises(TaskCancelled): n.execute_attempt(goal,15.)
+        n.publish_target.assert_called_once()
+        n.server.set_succeeded.assert_not_called()
 
 
 if __name__=='__main__': unittest.main()

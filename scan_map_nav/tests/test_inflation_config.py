@@ -11,7 +11,7 @@ class InflationConfigTests(unittest.TestCase):
     def test_requested_global_radius_keeps_occupied_and_unknown_policy(self):
         config = yaml.safe_load((PACKAGE / 'config/global.yaml').read_text())
         costmap = config['global_costmap']
-        self.assertEqual(costmap['inflation_layer']['inflation_radius'], 0.10)
+        self.assertEqual(costmap['inflation_layer']['inflation_radius'], 0.30)
         self.assertEqual(costmap['inflation_layer']['cost_scaling_factor'], 5.0)
         self.assertTrue(costmap['track_unknown_space'])
         self.assertFalse(config['GlobalPlanner']['allow_unknown'])

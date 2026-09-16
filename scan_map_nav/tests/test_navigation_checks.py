@@ -146,13 +146,16 @@ class NavigationWiringTests(unittest.TestCase):
                         correction_step=0.08,stall_timeout=15.0,max_replans=2,
                         local_recovery_limit=4.0,local_retry_wait=0.2,lease_progress_timeout=0.3,
                         loop_period=0.05,
-                        guide_extension_failures=3,guide_extension_offsets=[.1,.2,.3,.4,.5])
+                        jump_confirm_frames=5,jump_confirm_time=.3,
+                        jump_recover_frames=3,jump_recover_time=.15,jump_hold_timeout=2.,
+                        guide_extension_failures=3,guide_extension_step=.5,
+                        guide_extension_max_ahead=5.,guide_extension_motion=.2)
         for key,value in expected.items():
             self.assertEqual(config[key],value)
         for key in ('guide_spacing','guide_reach_radius','guide_progress_timeout',
                     'max_route_deviation','deviation_timeout','path_check_horizon',
                     'trial_stage_budget','trial_total_budget','trial_max_deviation','block_confirm_time',
-                    'target_resend','target_near_distance'):
+                    'target_resend','target_near_distance','guide_extension_offsets'):
             self.assertNotIn(key,config)
 
     def lease_nav(self):
@@ -163,6 +166,7 @@ class NavigationWiringTests(unittest.TestCase):
         nav.server = Mock()
         nav.server.is_preempt_requested.return_value = False
         nav.lease_progress_timeout = 0.3
+        nav.task_lease_watchdog = True
         nav.control_intent = None
         nav.lease_recovery_done = 0
         return nav
@@ -183,6 +187,49 @@ class NavigationWiringTests(unittest.TestCase):
         nav.control_progress = time.monotonic()-0.31
         nav.renew_lease()
         self.assertEqual(nav.control.publish.call_count,1)
+
+    def test_disabled_watchdog_renews_intent_without_faking_new_computation(self):
+        nav = self.lease_nav()
+        nav.task_lease_watchdog = False
+        with patch('rospy.Time.now',return_value=rospy.Time.from_sec(100)):
+            nav.lease(NavigationControl.TRACK)
+        nav.control_progress = time.monotonic()-5
+        with patch('rospy.Time.now',return_value=rospy.Time.from_sec(105)):
+            nav.renew_lease()
+        self.assertEqual(nav.control.publish.call_count,2)
+        self.assertEqual(nav.control.publish.call_args.args[0].header.stamp.to_sec(),100)
+        nav.server.is_preempt_requested.return_value = True
+        nav.renew_lease()
+        self.assertEqual(nav.control.publish.call_count,2)
+        with patch('rospy.Time.now',return_value=rospy.Time.from_sec(105)):
+            nav.stop()
+            nav.renew_lease()
+        self.assertEqual(nav.control.publish.call_args.args[0].mode,NavigationControl.STOP)
+
+    def test_disabled_watchdog_ignores_old_recovery_request(self):
+        nav = self.lease_nav()
+        nav.task_lease_watchdog = False
+        nav.lease_request = LeaseRecovery(recovery_id=3,task_id=7,epoch=1)
+        nav.clear_scan = Mock()
+        self.assertFalse(nav.recover_lease(200))
+        nav.clear_scan.assert_not_called()
+
+    def test_launch_defaults_watchdog_off_and_forwards_one_switch(self):
+        launch=ET.parse(str(ROOT/'src/scan_map_navigation/launch/navigation.launch')).getroot()
+        self.assertEqual(launch.find("arg[@name='task_lease_watchdog']").get('default'),'false')
+        for node in ('scan_navigator','scan_velocity_gate'):
+            param=launch.find("node[@name='%s']/param[@name='task_lease_watchdog']"%node)
+            self.assertEqual(param.get('value'),'$(arg task_lease_watchdog)')
+            self.assertEqual(param.get('type'),'bool')
+        includes=launch.findall('include')
+        local_include=next(i for i in includes if i.get('file').endswith('/launch/scan_local.launch'))
+        self.assertEqual(local_include.find("arg[@name='task_lease_watchdog']").get('value'),
+                         '$(arg task_lease_watchdog)')
+        local=ET.parse(str(ROOT/'src/scan_map_navigation/launch/scan_local.launch')).getroot()
+        self.assertEqual(local.find("arg[@name='task_lease_watchdog']").get('default'),'false')
+        param=local.find("param[@name='scan_controller/task_lease_watchdog']")
+        self.assertEqual(param.get('value'),'$(arg task_lease_watchdog)')
+        self.assertEqual(param.get('type'),'bool')
 
     def test_stop_replaces_worker_intent_and_cancel_cannot_rearm_it(self):
         nav = self.lease_nav()

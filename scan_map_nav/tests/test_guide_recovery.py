@@ -12,83 +12,140 @@ from navigator import Navigator
 
 class GuideRecoveryTests(unittest.TestCase):
     def setUp(self):
-        self.route=OrderedRoute([(0,0),(4,0)])
+        self.route=OrderedRoute([(0,0),(8,0)],lookahead=2.)
         self.visible=lambda a,b: True
         self.normal,_=self.route.select((0,0))
         self.guide=GuideRecovery()
+        self.guide.observe_motion((0,0),False)
 
-    def fail(self,arc=.9):
+    def fail(self,arc=2.):
         return self.guide.failed(self.route,(0,0),arc,self.visible)
 
-    def test_three_failed_rounds_then_exact_non_cumulative_ladder(self):
+    def test_third_failed_round_extends_then_one_half_metre_per_failure(self):
         self.assertIsNone(self.fail()); self.assertIsNone(self.fail())
-        for arc in (1.,1.1,1.2,1.3,1.4):
-            choice,actual,offset=self.fail(arc-.1)
+        for arc in (2.5,3.,3.5,4.,4.5,5.):
+            choice,actual,offset=self.fail(arc-.5)
             self.assertAlmostEqual(actual,arc)
             self.assertAlmostEqual(choice[0][0],arc)
-            self.assertAlmostEqual(offset,arc-.9)
-        self.assertIsNone(self.fail(1.4))
-        self.assertAlmostEqual(self.guide.active_arc,1.4)
+            self.assertAlmostEqual(offset,arc-2.)
+        for _ in range(5): self.assertIsNone(self.fail(5.))
+        self.assertAlmostEqual(self.guide.active_arc,5.)
 
     def test_extension_follows_bent_path_arc_not_world_x(self):
-        self.route=OrderedRoute([(0,0),(0,.9),(.1,1.4)])
+        self.route=OrderedRoute([(0,0),(0,2),(.1,6)],lookahead=2.)
         self.route.select((0,0))
         self.fail(); self.fail()
         choice,arc,_=self.fail()
-        self.assertEqual(choice[0],self.route.at(1.))
-        self.assertAlmostEqual(arc,1.)
+        self.assertEqual(choice[0],self.route.at(2.5))
+        self.assertAlmostEqual(arc,2.5)
 
     def test_right_angle_is_not_cut_to_reach_extension(self):
-        self.route=OrderedRoute([(0,0),(.9,0),(.9,2)])
+        self.route=OrderedRoute([(0,0),(2,0),(2,6)],lookahead=2.)
         self.route.select((0,0))
         self.fail(); self.fail()
-        first=self.fail()
-        self.assertAlmostEqual(first[1],1.)  # Within existing 0.12 m corner allowance.
-        self.assertIsNone(self.fail())        # Larger cuts are all rejected.
-        self.assertAlmostEqual(self.guide.active_arc,1.)
+        self.assertIsNone(self.fail())
+        self.assertIsNone(self.guide.active_arc)
 
     def test_invisible_stages_skipped_without_publishing_them(self):
-        self.visible=lambda a,b: b[0]>1.15
+        self.visible=lambda a,b: b[0]>3.1
         self.fail(); self.fail()
-        self.assertAlmostEqual(self.fail()[1],1.2)
+        self.assertAlmostEqual(self.fail()[1],3.5)
 
     def test_goal_clamping_never_overshoots_or_repeats_same_trial(self):
-        self.route=OrderedRoute([(0,0),(1.15,0)])
+        self.route=OrderedRoute([(0,0),(3.2,0)],lookahead=2.)
         self.route.select((0,0))
         self.fail(); self.fail()
-        for expected in (1.,1.1,1.15):
-            candidate,arc,_=self.fail()
+        current=2.
+        for expected in (2.5,3.,3.2):
+            candidate,arc,_=self.fail(current)
             self.assertAlmostEqual(arc,expected)
+            current=arc
         self.assertTrue(candidate[1])
-        self.assertIsNone(self.fail())
+        self.assertIsNone(self.fail(current))
+
+    def test_already_final_guide_does_not_extend(self):
+        self.route=OrderedRoute([(0,0),(1.2,0)],lookahead=2.)
+        self.route.select((0,0))
+        for _ in range(5): self.assertIsNone(self.fail(1.2))
+        self.assertIsNone(self.guide.active_arc)
 
     def test_hold_extended_target_until_normal_rolling_guide_catches_up(self):
-        self.fail(); self.fail()
-        for _ in range(5): self.fail()
-        normal,_=self.route.select((.1,0))
-        choice,arc=self.guide.choose(self.route,(.1,0),normal,self.visible)
-        self.assertAlmostEqual(arc,1.4)  # Do not pull guide back to 1.0.
-        normal,_=self.route.select((.55,0))
-        choice,arc=self.guide.choose(self.route,(.55,0),normal,self.visible)
-        self.assertAlmostEqual(arc,1.45)
+        self.fail(); self.fail(); self.fail()
+        self.assertTrue(self.guide.observe_motion((.21,0),True))
         self.assertEqual(self.guide.failures,0)
+        normal,_=self.route.select((.21,0))
+        choice,arc=self.guide.choose(self.route,(.21,0),normal,self.visible)
+        self.assertAlmostEqual(arc,2.5)  # Moving must not pull the working point back to 2.21.
+        normal,_=self.route.select((.5,0))
+        choice,arc=self.guide.choose(self.route,(.5,0),normal,self.visible)
+        self.assertAlmostEqual(arc,2.5)
+        self.assertIsNone(self.guide.active_arc)
 
     def test_normal_motion_clears_consecutive_failure_count(self):
         self.fail(); self.fail()
-        normal,_=self.route.select((.25,0))
-        self.guide.choose(self.route,(.25,0),normal,self.visible)
+        for x in (.1,.15,.199):
+            self.assertFalse(self.guide.observe_motion((x,0),True))
+            self.assertEqual(self.guide.failures,2)
+        self.assertTrue(self.guide.observe_motion((.2,0),True))
         self.assertEqual(self.guide.failures,0)
+        self.assertIsNone(self.fail())
+
+    def test_tracking_label_and_map_correction_do_not_count_as_movement(self):
+        self.fail(); self.fail(); self.fail()
+        for _ in range(5):
+            self.assertFalse(self.guide.observe_motion((0,0),True))
+        normal,_=self.route.select((.5,0))
+        self.guide.choose(self.route,(.5,0),normal,self.visible)
+        self.assertEqual(self.guide.failures,3)
+        self.assertEqual(self.guide.limit_arc,5.)
+
+    def test_motion_while_blocked_is_not_a_successful_scan_trial(self):
+        self.fail(); self.fail(); self.fail()
+        self.assertFalse(self.guide.observe_motion((.21,0),False))
+        self.assertEqual(self.guide.failures,3)
+
+    def test_new_blockage_after_real_motion_requires_three_failures_again(self):
+        self.fail(); self.fail(); self.fail()
+        self.guide.observe_motion((.21,0),True)
+        self.assertIsNone(self.fail(2.5)); self.assertIsNone(self.fail(2.5))
+        self.assertAlmostEqual(self.fail(2.5)[1],3.)
+
+    def test_limit_is_frozen_until_actual_motion_not_advanced_by_map_jitter(self):
+        self.fail(); self.fail(); self.fail()
+        self.route.select((.05,0))
+        current=2.5
+        for expected in (3.,3.5,4.,4.5,5.):
+            _,current,_=self.fail(current)
+            self.assertAlmostEqual(current,expected)
+        self.assertIsNone(self.fail(current))
+
+    def test_small_back_and_forth_motion_does_not_accumulate_travel_to_clear_count(self):
+        self.fail(); self.fail()
+        for x in (.1,-.1,.15,-.15,0.,.199):
+            self.assertFalse(self.guide.observe_motion((x,0),True))
+            self.assertEqual(self.guide.failures,2)
+
+    def test_limit_is_ahead_of_current_progress_not_map_origin(self):
+        self.route.progress=2.
+        self.route.select((2.,0))
+        for _ in range(2):
+            self.assertIsNone(self.guide.failed(self.route,(2.,0),4.,self.visible))
+        current=4.
+        for expected in (4.5,5.,5.5,6.,6.5,7.):
+            _,current,_=self.guide.failed(self.route,(2.,0),current,self.visible)
+            self.assertAlmostEqual(current,expected)
+        self.assertIsNone(self.guide.failed(self.route,(2.,0),current,self.visible))
 
     def test_partial_progress_does_not_extend_to_a_point_behind_current_guide(self):
-        self.fail(.9); self.fail(.95)
-        candidate,arc,_=self.fail(1.05)
-        self.assertAlmostEqual(arc,1.1)  # +0.1 from 0.9 is already behind 1.05.
+        self.fail(2.); self.fail(2.05)
+        candidate,arc,_=self.fail(2.15)
+        self.assertAlmostEqual(arc,2.65)  # Step from the current, not the first failed point.
 
     def test_crossing_does_not_jump_to_later_return_branch(self):
-        self.route=OrderedRoute([(0,0),(2,0),(2,2),(0,2),(0,0),(2,-1)])
+        self.route=OrderedRoute([(0,0),(6,0),(6,2),(0,2),(0,0),(2,-1)],lookahead=2.)
         self.route.select((0,0))
         self.fail(); self.fail()
-        self.assertEqual(self.fail()[0][0],(1.,0.))
+        self.assertEqual(self.fail()[0][0],(2.5,0.))
 
     def test_new_task_or_route_reset_clears_extension(self):
         self.fail(); self.fail(); self.fail()
@@ -97,8 +154,9 @@ class GuideRecoveryTests(unittest.TestCase):
         self.assertIsNone(self.fail())
 
     def test_invalid_parameters_rejected(self):
-        for failures,offsets in ((0,[.1]),(3,[]),(3,[.2,.1]),(3,[float('nan')])):
-            with self.assertRaises(ValueError): GuideRecovery(failures,offsets)
+        for args in ((0,.5,5.,.1),(3,0,5.,.1),(3,.5,0,.1),(3,.5,5.,0),
+                     (3,float('nan'),5.,.1),(3,.5,float('inf'),.1),(3,.5,5.,float('nan'))):
+            with self.assertRaises(ValueError): GuideRecovery(*args)
 
 
 class TargetCadenceTests(unittest.TestCase):
@@ -190,14 +248,15 @@ class TwoMetreConfigTests(unittest.TestCase):
         choice,_=corner.select((0,0))
         self.assertEqual(choice,((.6,0.),False))
 
-    def test_recovery_extends_two_metre_guide_to_two_point_five(self):
-        route=self.route([(0,0),(5,0)]); route.select((0,0))
-        guide=GuideRecovery(self.config['guide_extension_failures'],self.config['guide_extension_offsets'])
+    def test_recovery_extends_two_metre_guide_to_five_metres(self):
+        route=self.route([(0,0),(8,0)]); route.select((0,0))
+        guide=GuideRecovery(self.config['guide_extension_failures'],self.config['guide_extension_step'],
+                            self.config['guide_extension_max_ahead'],self.config['guide_extension_motion'])
         visible=lambda a,b: True
         self.assertIsNone(guide.failed(route,(0,0),2.,visible))
         self.assertIsNone(guide.failed(route,(0,0),2.,visible))
         current=2.
-        for expected in (2.1,2.2,2.3,2.4,2.5):
+        for expected in (2.5,3.,3.5,4.,4.5,5.):
             _,current,_=guide.failed(route,(0,0),current,visible)
             self.assertAlmostEqual(current,expected)
         self.assertIsNone(guide.failed(route,(0,0),current,visible))

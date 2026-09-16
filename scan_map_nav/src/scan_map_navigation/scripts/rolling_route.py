@@ -112,45 +112,57 @@ class OrderedRoute:
 
 
 class GuideRecovery:
-    """After three failed rounds, try +0.1 .. +0.5 m from ONE frozen guide arc."""
-    def __init__(self, failures=3, offsets=(.1,.2,.3,.4,.5)):
+    """After failed rounds, extend by one step up to a bounded path horizon."""
+    def __init__(self, failures=3, step=.5, max_ahead=5., motion=.2):
         if type(failures) is not int or failures < 1:
             raise ValueError('Invalid guide_extension_failures')
-        if (not offsets or any(not math.isfinite(x) or x <= 0 for x in offsets) or
-                any(b <= a for a,b in zip(offsets,offsets[1:]))):
-            raise ValueError('Invalid guide_extension_offsets')
-        self.threshold,self.offsets = failures,tuple(offsets)
+        if any(not math.isfinite(x) or x <= 0 for x in (step,max_ahead,motion)):
+            raise ValueError('Invalid guide extension step/horizon/motion')
+        self.threshold,self.step,self.max_ahead,self.motion = failures,step,max_ahead,motion
         self.reset()
 
     def reset(self):
-        self.failures,self.stage = 0,-1
-        self.base_arc = self.active_arc = self.start_progress = None
+        self.active_arc = self.last_odom = None
+        self.reset_trials()
+
+    def reset_trials(self):
+        self.failures = 0
+        self.base_arc = self.trial_arc = self.limit_arc = self.motion_anchor = None
+
+    def observe_motion(self, odom_xy, tracking):
+        # Continuous leg odometry, not a map/NDT correction or a TRACKING label.
+        self.last_odom = tuple(odom_xy[:2])
+        if (tracking and self.motion_anchor is not None and
+                distance(self.last_odom,self.motion_anchor) >= self.motion):
+            self.reset_trials()  # Keep the working guide until normal selection catches up.
+            return True
+        return False
 
     def choose(self, route, robot, normal, visible):
         if self.active_arc is not None:
             if route.selected_arc >= self.active_arc-1e-6:
-                self.reset()  # Normal rolling guide has caught up; never pull it back.
+                self.active_arc = None  # Catch-up alone is not proof of body movement.
             else:
                 candidate = route.checked_target(robot,self.active_arc,visible)
                 if candidate is not None:
                     return candidate,self.active_arc
-                self.reset()  # Do not retain an extension across a new static obstruction.
-        elif self.start_progress is not None and route.progress-self.start_progress >= .2:
-            self.reset()  # Real forward progress, not a transient TRACKING report.
+                self.active_arc = None  # Never retain a now-invalid target.
         return normal,route.selected_arc
 
     def failed(self, route, robot, sent_arc, visible):
-        if self.base_arc is None:
-            self.base_arc,self.start_progress = sent_arc,route.progress
         self.failures += 1
+        self.motion_anchor = self.last_odom
         if self.failures < self.threshold:
             return None
-        while self.stage+1 < len(self.offsets):
-            self.stage += 1
-            arc = min(route.lengths[-1],self.base_arc+self.offsets[self.stage])
-            lower = max(sent_arc,self.active_arc if self.active_arc is not None else self.base_arc)
-            if arc <= lower+1e-6:
-                continue  # No duplicate endpoint or backward step after partial progress.
+        if self.base_arc is None:
+            self.base_arc = sent_arc
+            # Freeze this episode's ceiling: map jitter cannot keep moving it away.
+            self.limit_arc = min(route.lengths[-1],route.progress+self.max_ahead)
+        lower = max(sent_arc,self.active_arc if self.active_arc is not None else sent_arc,
+                    self.trial_arc if self.trial_arc is not None else sent_arc)
+        while lower < self.limit_arc-1e-6:
+            arc = min(self.limit_arc,lower+self.step)
+            self.trial_arc = lower = arc
             candidate = route.checked_target(robot,arc,visible)
             if candidate is not None:
                 self.active_arc = arc

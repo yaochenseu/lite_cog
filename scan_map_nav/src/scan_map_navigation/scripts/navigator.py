@@ -21,6 +21,7 @@ from scan_map_navigation.msg import (NavigateAction, NavigateFeedback, NavigateG
                                      NavigateResult, NavigationControl, LocalTarget, PlannerState, LeaseRecovery)
 from nav_math import angle
 from rolling_route import OrderedRoute, GuideRecovery, distance, planar_transform, transform_point, correction_size
+from localization_guard import LocalizationJumpGuard
 
 
 class TaskCancelled(Exception):
@@ -54,12 +55,15 @@ class Navigator:
         self.hard_fault_serial = 0
         self.hard_fault_reason = ''
         self.hard_fault_baseline = 0
-        self.localization_anchor = None
+        self.jump_resume_pending = False
         self.latest_ndt = None
         self.ndt_min_inliers = rospy.get_param('/scan_velocity_gate/min_inlier_fraction',0.5)
         self.ndt_max_error = rospy.get_param('/scan_velocity_gate/max_matching_error',0.3)
         self.last_remaining = float('nan')
         self.test_stalled = False
+        self.task_lease_watchdog = rospy.get_param('~task_lease_watchdog',False)
+        if type(self.task_lease_watchdog) is not bool:
+            raise ValueError('task_lease_watchdog must be a boolean')
         for name,default in dict(xy_tolerance=0.15,yaw_tolerance=0.12,task_timeout=300.0,
                                  stall_timeout=15.0,service_timeout=2.0,lookahead=2.0,
                                  corner_cut=0.12,target_step=0.08,correction_step=0.08,
@@ -76,9 +80,17 @@ class Navigator:
         if type(self.localization_retries) is not int or not 0 <= self.localization_retries <= 10:
             raise ValueError('Invalid localization_retries (expected 0..10)')
         self.max_replans = rospy.get_param('~max_replans',2)
+        self.jump_guard = LocalizationJumpGuard(
+            self.jump_distance,self.jump_yaw,
+            rospy.get_param('~jump_confirm_frames',5),rospy.get_param('~jump_confirm_time',.3),
+            rospy.get_param('~jump_recover_frames',3),rospy.get_param('~jump_recover_time',.15),
+            rospy.get_param('~jump_hold_timeout',2.))
         self.guide_extension_failures = rospy.get_param('~guide_extension_failures',3)
-        self.guide_extension_offsets = rospy.get_param('~guide_extension_offsets',[.1,.2,.3,.4,.5])
-        GuideRecovery(self.guide_extension_failures,self.guide_extension_offsets)  # validate
+        self.guide_extension_step = rospy.get_param('~guide_extension_step',.5)
+        self.guide_extension_max_ahead = rospy.get_param('~guide_extension_max_ahead',5.)
+        self.guide_extension_motion = rospy.get_param('~guide_extension_motion',.2)
+        GuideRecovery(self.guide_extension_failures,self.guide_extension_step,
+                      self.guide_extension_max_ahead,self.guide_extension_motion)  # validate
         self.control = rospy.Publisher('/scan_map_nav/control',NavigationControl,queue_size=1,latch=True)
         self.lease_ack = rospy.Publisher('/scan_map_nav/lease_recovery_ack',LeaseRecovery,queue_size=1)
         self.target = rospy.Publisher('/scan_map_nav/local_target',LocalTarget,queue_size=1)
@@ -147,12 +159,32 @@ class Navigator:
                 status.matching_error <= self.ndt_max_error and
                 math.isfinite(status.inlier_fraction) and status.inlier_fraction >= self.ndt_min_inliers)
 
-    def validate_localization_change(self,robot,transform):
-        if self.localization_anchor is not None:
-            xy = (robot.pose.position.x,robot.pose.position.y)
-            shift,turn = correction_size(self.localization_anchor,transform,[xy])
-            if shift > self.jump_distance or turn > self.jump_yaw:
-                raise RuntimeError('Large localization jump; check RViz and resend goal')
+    def validate_localization_change(self,robot,transform,target=None):
+        was_pending = self.jump_guard.pending
+        xy = (robot.pose.position.x,robot.pose.position.y)
+        result = self.jump_guard.observe(robot.header.stamp.to_nsec(),transform,xy,target,time.monotonic())
+        if result == 'HOLD':
+            self.stop()
+            if not was_pending:
+                rospy.logwarn('Suspected localization jump: %.3f m / %.1f deg at TF %.6f; holding STOP for multi-frame confirmation',
+                              self.jump_guard.shift,math.degrees(self.jump_guard.turn),robot.header.stamp.to_sec())
+                self.clear_scan()  # Discard the old spline once, never execute through uncertain TF.
+                self.jump_resume_pending = True
+            self.state.publish(String('LOCALIZATION_JUMP_HOLD'))
+            self.server.publish_feedback(NavigateFeedback('LOCALIZATION_JUMP_HOLD',self.last_remaining))
+            return False
+        if result == 'RECOVERED':
+            rospy.logwarn('Localization jump recovered on fresh frames; generating a new local trajectory for the same task')
+        return True
+
+    def checked_snapshot(self,deadline,target=None):
+        while True:
+            self.check_task(deadline)
+            robot,transform,height = self.snapshot()
+            if self.validate_localization_change(robot,transform,target):
+                self.check_task(deadline)
+                return robot,transform,height
+            time.sleep(0.05)
 
     def wait_localization(self,deadline,after_stamp,label):
         # STOP is held throughout. Readiness alone is insufficient: require a
@@ -169,8 +201,8 @@ class Navigator:
                 except LocalizationTimeout:
                     pass
                 else:
-                    self.validate_localization_change(robot,transform)
-                    if robot.header.stamp > after_stamp and self.recovered_ndt(after_stamp):
+                    valid = self.validate_localization_change(robot,transform)
+                    if valid and robot.header.stamp > after_stamp and self.recovered_ndt(after_stamp):
                         self.retry_guard(deadline)
                         return True
             time.sleep(0.05)
@@ -185,6 +217,8 @@ class Navigator:
             self.lease_request = msg
 
     def recover_lease(self,deadline):
+        if not self.task_lease_watchdog:
+            return False
         request = self.lease_request
         if (request is None or request.recovery_id <= self.lease_recovery_done or
                 (request.task_id,request.epoch) != (self.task_id,self.task_epoch)):
@@ -232,10 +266,13 @@ class Navigator:
                 return
             if msg.mode != NavigationControl.STOP:
                 if (self.server.is_preempt_requested() or
-                        time.monotonic()-self.control_progress > self.lease_progress_timeout):
+                        (self.task_lease_watchdog and
+                         time.monotonic()-self.control_progress > self.lease_progress_timeout)):
                     return
                 # Retain the last computation's stamp, so a live worker cannot
-                # keep a stalled computation's permission fresh indefinitely.
+                # mask a stalled computation when the watchdog is enabled.
+                # Disabled mode keeps announcing intent, not fake fresh work;
+                # gate/controller skip only the lease age checks in that mode.
                 self.control.publish(msg)
             else:
                 stopped = copy.deepcopy(msg)
@@ -287,9 +324,7 @@ class Navigator:
         while True:
             self.stop()
             self.check_task(deadline)
-            robot,transform,_ = self.snapshot()
-            self.validate_localization_change(robot,transform)
-            self.localization_anchor = transform
+            robot,transform,_ = self.checked_snapshot(deadline,point)
             self.state.publish(String('BLOCKED_WAIT'))
             self.server.publish_feedback(NavigateFeedback('BLOCKED_WAIT',self.last_remaining))
             if time.monotonic() >= end:
@@ -297,9 +332,7 @@ class Navigator:
             time.sleep(0.05)
         self.clear_scan()
         self.check_task(deadline)
-        robot,transform,height = self.snapshot()
-        self.validate_localization_change(robot,transform)
-        self.localization_anchor = transform
+        robot,transform,height = self.checked_snapshot(deadline,point)
         self.check_task(deadline)
         # Same map point, but current localization correction and a new local
         # generation. TRACK cannot release motion until SCAN checks a new spline.
@@ -444,12 +477,10 @@ class Navigator:
         p.z = 0
         yaw_goal = quat_yaw(q)
         self.clear_scan()  # task boundary only, not normal target updates
-        robot,transform,height = self.snapshot()
-        self.validate_localization_change(robot,transform)
-        self.localization_anchor = transform
-        last_transform = transform
+        robot,transform,height = self.checked_snapshot(deadline)
         route = None
-        guides = GuideRecovery(self.guide_extension_failures,self.guide_extension_offsets)
+        guides = GuideRecovery(self.guide_extension_failures,self.guide_extension_step,
+                               self.guide_extension_max_ahead,self.guide_extension_motion)
         sent_point,sent_transform,sent_final = None,None,None
         sent_arc = None
         sent_at = 0
@@ -461,22 +492,18 @@ class Navigator:
             # Test hook stalls computation, not callbacks or lease renewal.
             while self.test_stalled and not self.server.is_preempt_requested() and not rospy.is_shutdown():
                 time.sleep(0.02)
-            self.check_task(deadline)
+            robot,transform,height = self.checked_snapshot(deadline,sent_point)
             now = time.monotonic()
-            robot,transform,height = self.snapshot()
             xy = robot.pose.position.x,robot.pose.position.y
             yaw = quat_yaw(robot.pose.orientation)
             remaining = distance(xy,(p.x,p.y))
             self.last_remaining = remaining
-            probe=sent_point or xy
-            probe_distance=distance(xy,probe)
-            if probe_distance>1.0:
-                probe=(xy[0]+(probe[0]-xy[0])/probe_distance,xy[1]+(probe[1]-xy[1])/probe_distance)
-            shift,turn = correction_size(last_transform,transform,[xy,probe])
-            if shift > self.jump_distance or turn > self.jump_yaw:
-                raise RuntimeError('Large localization jump; check RViz and resend goal')
-            last_transform = transform
-            self.localization_anchor = transform
+            if self.jump_resume_pending:
+                # Preserve route/goal/guide policy; a new checked spline is mandatory.
+                sent_point = sent_arc = None
+                recovery_generation = None
+                last_progress = now
+                self.jump_resume_pending = False
             if self.recover_lease(deadline):
                 # Preserve the static route, but require a newly generated local trajectory.
                 sent_point = None
@@ -486,6 +513,8 @@ class Navigator:
             if distance(xy,anchor) > 0.08 or abs(angle(yaw-anchor[2])) > 0.12:
                 last_progress,anchor = now,(xy[0],xy[1],yaw)
             local = self.local_state()
+            guides.observe_motion(transform_point(transform,xy),
+                                  local is not None and local.state == PlannerState.TRACKING)
             recovering = local is not None and local.state in (PlannerState.RECOVERING,PlannerState.BLOCKED)
             if recovering and recovery_generation != local.generation:
                 recovery_generation,recovery_started = local.generation,now
@@ -550,7 +579,8 @@ class Navigator:
                     sent_transform,sent_at = self.retry_local_target(point,final,deadline,reason,label)
                     sent_point,sent_final = point,final
                     sent_arc = arc
-                    last_transform = sent_transform
+                    # retry_local_target already published a freshly checked target.
+                    self.jump_resume_pending = False
                     last_progress = sent_at
                     recovery_generation = None
                     continue
@@ -577,7 +607,8 @@ class Navigator:
     def execute(self,request):
         self.stop()
         self.hard_fault_baseline = self.hard_fault_serial
-        self.localization_anchor = None
+        self.jump_guard.reset()
+        self.jump_resume_pending = False
         self.last_remaining = float('nan')
         deadline = time.monotonic()+self.task_timeout
         retries = 0
