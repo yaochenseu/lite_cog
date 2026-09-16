@@ -7,6 +7,8 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf/tf.h>
 #include <cmath>
+#include <algorithm>
+#include <vector>
 
 class MapPlanner {
   ros::NodeHandle nh_{"~"};
@@ -34,8 +36,12 @@ public:
     boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*cm->getMutex());
     res.plan.header.frame_id = costmap_.getGlobalFrameID();
     res.plan.header.stamp = ros::Time::now();
-    if (!planner_.makePlan(req.start, req.goal, req.tolerance, res.plan.poses))
-      return false;
+    // GlobalPlanner clears the start cell; do not permanently mutate the prior.
+    const std::vector<unsigned char> saved(cm->getCharMap(),
+        cm->getCharMap()+cm->getSizeInCellsX()*cm->getSizeInCellsY());
+    const bool success=planner_.makePlan(req.start, req.goal, req.tolerance, res.plan.poses);
+    std::copy(saved.begin(),saved.end(),cm->getCharMap());
+    if (!success) return false;
     path_pub_.publish(res.plan);
     return true;
   }

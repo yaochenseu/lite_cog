@@ -19,6 +19,11 @@ Visualization Manager:
       Show Names: true
       Show Axes: true
       Show Arrows: true
+    - Class: rviz/Map
+      Name: Static Planning Costs
+      Enabled: true
+      Topic: /scan_global/global_costmap/costmap
+      Alpha: 0.35
     - Class: rviz/Axes
       Name: Robot Direction
       Enabled: true

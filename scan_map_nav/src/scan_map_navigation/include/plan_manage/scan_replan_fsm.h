@@ -18,6 +18,8 @@
 #include <scan_map_navigation/LocalTarget.h>
 #include <scan_map_navigation/LocalTrajectory.h>
 #include <scan_map_navigation/NavigationControl.h>
+#include <scan_map_navigation/PlannerState.h>
+#include <std_srvs/SetBool.h>
 #include <vector>
 #include <visualization_msgs/Marker.h>
 
@@ -107,6 +109,20 @@ namespace scan_planner
     ros::ServiceServer reset_srv_, check_srv_;
     ros::Publisher heartbeat_pub_;
     ros::Publisher tagged_traj_pub_;
+    ros::Publisher planner_state_pub_;
+    uint64_t execution_generation_{0};
+    uint64_t recovery_target_id_{0};
+    bool local_hold_{false}, local_blocked_{false}, checked_trajectory_{false};
+    bool test_obstacle_{false};
+    ros::ServiceServer test_obstacle_srv_;
+    ros::WallTime local_recovery_started_, local_retry_at_;
+    int local_attempts_{0}, local_max_attempts_{20};
+    double local_recovery_timeout_{3.0}, local_retry_period_{0.1};
+    std::string local_reason_;
+    void beginLocalRecovery(const std::string &reason);
+    void runLocalRecovery();
+    void publishPlannerState();
+    bool validateLocalTrajectory();
     ros::Subscriber rolling_target_sub_, control_sub_;
     scan_map_navigation::NavigationControl navigation_control_;
     uint64_t rolling_task_id_{0};

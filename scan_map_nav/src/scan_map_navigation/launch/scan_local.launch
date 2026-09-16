@@ -9,6 +9,7 @@
   <arg name="body_pose_topic" default="/leg_odom2"/>
   <arg name="sensor_pose_topic" default="/scan_lite3/lidar_odom"/>
   <arg name="cloud_topic" default="/rslidar_points"/>
+  <arg name="test_hooks" default="false"/>
 
   <!-- Conservative first-run limits. Increase only after odom, lidar and stop behavior are verified. -->
   <arg name="max_vel" default="0.35"/>
@@ -54,6 +55,10 @@
 
 
   <node pkg="scan_map_navigation" name="scan_local" type="map_scan_planner" required="true" output="screen" clear_params="true">
+    <param name="enable_test_hooks" value="$(arg test_hooks)"/>
+    <param name="fsm/local_recovery_timeout" value="3.0"/>
+    <param name="fsm/local_retry_period" value="0.1"/>
+    <param name="fsm/local_recovery_attempts" value="20"/>
     <remap from="/grid_map/body_pose" to="$(arg body_pose_topic)"/>
     <remap from="/grid_map/sensor_pose" to="$(arg sensor_pose_topic)"/>
     <remap from="/grid_map/cloud" to="$(arg cloud_topic)"/>

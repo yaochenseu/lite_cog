@@ -3,15 +3,21 @@ import ast
 import math
 import pathlib
 import sys
+import threading
+import time
 import unittest
 import xml.etree.ElementTree as ET
+import yaml
 from unittest.mock import Mock, patch
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'src/scan_map_navigation/scripts'))
 import rospy
-from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import Path, OccupancyGrid
+from geometry_msgs.msg import PoseStamped
 from navigator import Navigator
 from rolling_route import OrderedRoute, planar_transform, transform_point, correction_size
+from scan_map_navigation.msg import PlannerState, NavigationControl, LeaseRecovery
+from navigator import TaskCancelled
 
 
 class RollingRouteTests(unittest.TestCase):
@@ -74,6 +80,160 @@ class RollingRouteTests(unittest.TestCase):
 
 
 class NavigationWiringTests(unittest.TestCase):
+    def plan_fixture(self):
+        nav = Navigator.__new__(Navigator)
+        nav.lookahead,nav.corner_cut = 0.9,0.12
+        nav.path,nav.check_task = Mock(),Mock()
+        start,goal = PoseStamped(),PoseStamped()
+        start.header.frame_id = goal.header.frame_id = 'map'
+        start.pose.orientation.w = goal.pose.orientation.w = 1
+        goal.pose.position.x = 2.5
+        path = Path()
+        path.header.frame_id = 'map'
+        path.poses = [start,goal]
+        nav.plan = Mock()
+        nav.call = Mock(return_value=Mock(plan=path))
+        return nav,start,goal
+
+    def test_active_navigation_builds_rolling_route(self):
+        nav,start,goal=self.plan_fixture()
+        route = nav.make_route(start,goal,200)
+        self.assertIsInstance(route,OrderedRoute)
+        first,_ = route.select((0,0))
+        second,_ = route.select((0.4,0))
+        self.assertAlmostEqual(first[0][0],0.9)
+        self.assertAlmostEqual(second[0][0],1.3)
+        self.assertEqual(nav.path.publish.call_args.args[0].header.frame_id,'map')
+
+    def test_cancel_during_planning_never_commits_route(self):
+        nav,start,goal=self.plan_fixture()
+        nav.check_task.side_effect=[None,TaskCancelled()]
+        with self.assertRaises(TaskCancelled):
+            nav.make_route(start,goal,200)
+        nav.path.publish.assert_not_called()
+
+    def test_empty_or_wrong_frame_route_rejected(self):
+        nav,start,goal=self.plan_fixture()
+        nav.call.return_value.plan.header.frame_id='odom'
+        with self.assertRaisesRegex(RuntimeError,'map frame'):
+            nav.make_route(start,goal,200)
+        nav.call.return_value.plan.header.frame_id='map'
+        nav.call.return_value.plan.poses=[]
+        with self.assertRaisesRegex(RuntimeError,'Invalid/empty'):
+            nav.make_route(start,goal,200)
+        nav.path.publish.assert_not_called()
+
+    def test_latched_static_map_does_not_need_sensor_timestamps(self):
+        nav=Navigator.__new__(Navigator)
+        msg=OccupancyGrid()
+        msg.header.frame_id='map'
+        msg.header.stamp=rospy.Time.from_sec(1)
+        msg.info.width=msg.info.height=20
+        msg.info.resolution=.1
+        msg.info.origin.orientation.w=1
+        msg.data=[0]*400
+        nav.grid=msg
+        with patch('rospy.Time.now',return_value=rospy.Time.from_sec(10000)):
+            self.assertTrue(nav.visible((.1,.1),(.9,.1)))
+        msg.data[2*20+5]=100
+        self.assertFalse(nav.visible((.1,.2),(.9,.2)))
+        nav.grid=None
+        self.assertFalse(nav.visible((.1,.1),(.9,.1)))
+
+    def test_rolling_config_and_recovery_budgets_preserved(self):
+        config = yaml.safe_load((ROOT/'src/scan_map_navigation/config/rolling.yaml').read_text())
+        expected = dict(lookahead=2.0,corner_cut=0.12,target_step=0.08,target_period=0.05,
+                        correction_step=0.08,stall_timeout=15.0,max_replans=2,
+                        local_recovery_limit=4.0,local_retry_wait=0.2,lease_progress_timeout=0.3,
+                        loop_period=0.05,
+                        guide_extension_failures=3,guide_extension_offsets=[.1,.2,.3,.4,.5])
+        for key,value in expected.items():
+            self.assertEqual(config[key],value)
+        for key in ('guide_spacing','guide_reach_radius','guide_progress_timeout',
+                    'max_route_deviation','deviation_timeout','path_check_horizon',
+                    'trial_stage_budget','trial_total_budget','trial_max_deviation','block_confirm_time',
+                    'target_resend','target_near_distance'):
+            self.assertNotIn(key,config)
+
+    def lease_nav(self):
+        nav = Navigator.__new__(Navigator)
+        nav.task_id,nav.task_epoch = 7,1
+        nav.control_lock = threading.RLock()
+        nav.control = Mock()
+        nav.server = Mock()
+        nav.server.is_preempt_requested.return_value = False
+        nav.lease_progress_timeout = 0.3
+        nav.control_intent = None
+        nav.lease_recovery_done = 0
+        return nav
+
+    def test_independent_renewal_keeps_computation_stamp(self):
+        nav = self.lease_nav()
+        with patch('rospy.Time.now',return_value=rospy.Time.from_sec(100)):
+            nav.lease(NavigationControl.TRACK)
+        with patch('rospy.Time.now',return_value=rospy.Time.from_sec(100.2)):
+            nav.renew_lease()
+        self.assertEqual(nav.control.publish.call_count,2)
+        self.assertEqual(nav.control.publish.call_args.args[0].header.stamp.to_sec(),100)
+
+    def test_live_renewal_worker_does_not_mask_stalled_computation(self):
+        nav = self.lease_nav()
+        with patch('rospy.Time.now',return_value=rospy.Time.from_sec(100)):
+            nav.lease(NavigationControl.TRACK)
+        nav.control_progress = time.monotonic()-0.31
+        nav.renew_lease()
+        self.assertEqual(nav.control.publish.call_count,1)
+
+    def test_stop_replaces_worker_intent_and_cancel_cannot_rearm_it(self):
+        nav = self.lease_nav()
+        with patch('rospy.Time.now',return_value=rospy.Time.from_sec(100)):
+            nav.lease(NavigationControl.TRACK)
+            nav.stop()
+            nav.renew_lease()
+            self.assertEqual(nav.control.publish.call_args.args[0].mode,NavigationControl.STOP)
+            nav.server.is_preempt_requested.return_value = True
+            with self.assertRaises(TaskCancelled):
+                nav.lease(NavigationControl.TRACK)
+        self.assertEqual(nav.control_intent.mode,NavigationControl.STOP)
+
+    def test_recovery_ack_follows_both_resets(self):
+        nav = self.lease_nav()
+        nav.lease_request = LeaseRecovery(recovery_id=3,task_id=7,epoch=1)
+        nav.check_task,nav.state,nav.lease_ack = Mock(),Mock(),Mock()
+        events = []
+        nav.clear_scan = Mock(side_effect=lambda: events.append('reset'))
+        nav.lease_ack.publish.side_effect = lambda m: events.append('ack')
+        with patch('rospy.Time.now',return_value=rospy.Time.from_sec(100)):
+            self.assertTrue(nav.recover_lease(200))
+        self.assertEqual(events,['reset','ack'])
+        self.assertFalse(nav.recover_lease(200))
+
+    def test_failed_reset_never_acknowledges_recovery(self):
+        nav = self.lease_nav()
+        nav.lease_request = LeaseRecovery(recovery_id=3,task_id=7,epoch=1)
+        nav.check_task,nav.state,nav.lease_ack = Mock(),Mock(),Mock()
+        nav.clear_scan = Mock(side_effect=RuntimeError('reset failed'))
+        with self.assertRaises(RuntimeError):
+            nav.recover_lease(200)
+        nav.lease_ack.publish.assert_not_called()
+
+    def test_recovery_state_from_previous_reset_is_ignored(self):
+        nav = Navigator.__new__(Navigator)
+        nav.task_id,nav.task_epoch,nav.minimum_generation = 12,1,8
+        nav.planner_status = PlannerState(task_id=12,epoch=1,generation=7,state=PlannerState.BLOCKED)
+        self.assertIsNone(nav.local_state())
+        nav.planner_status.generation = 8
+        self.assertIsNotNone(nav.local_state())
+        nav.planner_status.task_id = 11
+        self.assertIsNone(nav.local_state())
+
+    def test_local_recovery_uses_measured_velocity_without_speed_wait(self):
+        source = (ROOT/'src/scan_map_navigation/src/scan_replan_fsm.cpp').read_text()
+        body = source[source.index('void SCANReplanFSM::runLocalRecovery()'):source.index('bool SCANReplanFSM::validateLocalTrajectory()')]
+        self.assertIn('start_vel_ = odom_vel_',body)
+        self.assertNotIn('odom_vel_.norm() <',body)
+        self.assertNotIn('callEmergencyStop',body)
+
     def test_manager_does_not_handle_velocities_or_collision_services(self):
         source = (ROOT/'src/scan_map_navigation/scripts/navigator.py').read_text()
         for token in ('desired_cmd','raw_cmd','safe_command','CheckPoses','wait_for_localization'):
@@ -89,6 +249,7 @@ class NavigationWiringTests(unittest.TestCase):
 
     def test_snapshot_uses_one_stamp(self):
         nav = Navigator.__new__(Navigator)
+        nav.localization_timeout=1.2
         nav.tf = Mock()
         stamp = rospy.Time.from_sec(100)
         nav.tf.getLatestCommonTime.return_value = stamp
@@ -100,17 +261,21 @@ class NavigationWiringTests(unittest.TestCase):
         self.assertEqual(transform,(3,3,0))
         self.assertEqual(height,0.3)
 
-    def test_visibility_is_map_topology_not_footprint(self):
-        nav = Navigator.__new__(Navigator)
-        grid = nav.grid = OccupancyGrid()
-        grid.header.frame_id = 'map'
-        grid.info.resolution = 0.1
-        grid.info.width = grid.info.height = 20
-        grid.info.origin.orientation.w = 1
-        grid.data = [0]*400
-        self.assertTrue(nav.visible((0.1,0.1),(1,0.1)))
-        grid.data[1*20+5] = 100
-        self.assertFalse(nav.visible((0.1,0.1),(1,0.1)))
+    def test_active_chain_is_static_without_runtime_map_dependency(self):
+        source=(ROOT/'src/scan_map_navigation/scripts/navigator.py').read_text()
+        gate=(ROOT/'src/scan_map_navigation/scripts/velocity_gate.py').read_text()
+        self.assertIn("rospy.Subscriber('/map'",source)
+        for code in (source,gate):
+            self.assertNotIn('/scan_map_nav/planning_grid',code)
+            self.assertNotIn('Runtime planning map',code)
+        self.assertNotIn('AdaptiveLookahead',source)
+        self.assertNotIn('AsyncPlan',source)
+        launch=ET.parse(str(ROOT/'src/scan_map_navigation/launch/navigation.launch')).getroot()
+        self.assertIsNone(launch.find("node[@type='runtime_map']"))
+        config=yaml.safe_load((ROOT/'src/scan_map_navigation/config/global.yaml').read_text())
+        self.assertEqual([v['type'] for v in config['global_costmap']['plugins']],
+                         ['costmap_2d::StaticLayer','costmap_2d::InflationLayer'])
+        self.assertEqual(config['global_costmap']['static_layer']['map_topic'],'/map')
 
 
 if __name__ == '__main__':

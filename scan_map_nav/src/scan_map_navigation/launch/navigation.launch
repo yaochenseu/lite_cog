@@ -4,6 +4,10 @@
   <arg name="rviz" default="true"/>
   <arg name="localization" default="true"/>
   <arg name="output_topic" default="/cmd_vel"/>
+  <arg name="test_hooks" default="false"/>
+  <arg name="localization_timeout" default="1.2"/>
+  <arg name="localization_retries" default="3"/>
+  <arg name="localization_retry_wait" default="3.0"/>
   <arg name="init_x" default="0.0"/>
   <arg name="init_y" default="0.0"/>
   <arg name="init_z" default="0.0"/>
@@ -16,15 +20,25 @@
     <arg name="init_z" value="$(arg init_z)"/>
     <arg name="init_yaw" value="$(arg init_yaw)"/>
   </include>
+  <!-- Static-map rollback: no runtime-map publisher or freshness dependency. -->
   <node pkg="scan_map_navigation" type="map_global_planner" name="scan_global" output="screen" required="true">
     <rosparam command="load" file="$(find scan_map_navigation)/config/global.yaml"/>
+    <param name="global_costmap/transform_tolerance" value="$(arg localization_timeout)"/>
   </node>
-  <include file="$(find scan_map_navigation)/launch/scan_local.launch"/>
+  <include file="$(find scan_map_navigation)/launch/scan_local.launch">
+    <arg name="test_hooks" value="$(arg test_hooks)"/>
+  </include>
   <node pkg="scan_map_navigation" type="navigator.py" name="scan_navigator" output="screen" required="true">
     <rosparam command="load" file="$(find scan_map_navigation)/config/rolling.yaml"/>
+    <param name="localization_timeout" value="$(arg localization_timeout)"/>
+    <param name="localization_retries" value="$(arg localization_retries)"/>
+    <param name="localization_retry_wait" value="$(arg localization_retry_wait)"/>
+    <param name="test_hooks" value="$(arg test_hooks)"/>
   </node>
   <node pkg="scan_map_navigation" type="velocity_gate.py" name="scan_velocity_gate" output="screen" required="true">
     <param name="output_topic" value="$(arg output_topic)"/>
+    <param name="lease_recovery_timeout" value="2.0"/>
+    <param name="localization_timeout" value="$(arg localization_timeout)"/>
   </node>
   <node pkg="rviz" type="rviz" name="scan_map_rviz" if="$(arg rviz)"
         args="-d $(find scan_map_navigation)/config/navigation.rviz"/>

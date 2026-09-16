@@ -1,0 +1,11 @@
+# In-memory only. Restart restores /map; no PGM/PCD writes or localization changes.
+update_period: 0.2
+max_rays: 4096
+hit_frames: 2
+free_frames: 4
+free_duration: 0.6
+# Free confirmations expire BACK to the prior; occupied additions never age to free.
+free_override_ttl: 5.0
+# Ground reference in continuous odom, matching SCAN's ground_height.
+ground_height: 0.0
+ground_margin: 0.03

@@ -7,10 +7,24 @@ logs/
 # Python
 __pycache__/
 *.pyc
+.venv/
+
+# 本机认证配置（保留可分发的示例）
+.env
+.env.*
+!.env.example
+!.env.sample
+**/iflytek.env
 
 # 备份文件
 *.bak_*
 *.bak
+/scan_*_backup.*/
+
+# 编辑器临时文件
+*.swp
+*.swo
+*.swx
 
 # 安装包（视情况保留）
 deb/

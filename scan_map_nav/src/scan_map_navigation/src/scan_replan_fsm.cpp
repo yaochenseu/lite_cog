@@ -49,6 +49,12 @@ namespace scan_planner
     nh.param("fsm/emergency_time_", emergency_time_, 1.0);
     nh.param("fsm/fail_safe", enable_fail_safe_, true);
     nh.param("fsm/max_replan_fail_count", max_replan_fail_count_, 1000);
+    nh.param("fsm/local_recovery_timeout", local_recovery_timeout_, 3.0);
+    nh.param("fsm/local_retry_period", local_retry_period_, 0.1);
+    nh.param("fsm/local_recovery_attempts", local_max_attempts_, 20);
+    local_recovery_timeout_ = std::max(0.1, local_recovery_timeout_);
+    local_retry_period_ = std::max(0.02, local_retry_period_);
+    local_max_attempts_ = std::max(1, local_max_attempts_);
     nh.param("fsm/recovery_enabled", recovery_enabled_, true);
     nh.param("fsm/recovery_trigger_fail_count", recovery_trigger_fail_count_, 8);
     nh.param("fsm/recovery_max_attempts", recovery_max_attempts_, 2);
@@ -112,10 +118,14 @@ namespace scan_planner
 
     bspline_pub_ = nh.advertise<scan_planner::Bspline>("/planning/bspline", 10);
     tagged_traj_pub_ = nh.advertise<scan_map_navigation::LocalTrajectory>("/scan_map_nav/local_trajectory", 1);
+    planner_state_pub_ = nh.advertise<scan_map_navigation::PlannerState>("/scan_map_nav/planner_state", 1, true);
     control_sub_ = nh.subscribe<scan_map_navigation::NavigationControl>("/scan_map_nav/control", 1,
         [this](const scan_map_navigation::NavigationControl::ConstPtr &msg) {
-          if (msg->task_id >= navigation_control_.task_id)
+          if (msg->task_id >= navigation_control_.task_id && msg->header.frame_id == "odom" && std::isfinite(msg->yaw))
+          {
             navigation_control_ = *msg;
+            publishPlannerState();
+          }
         });
     data_disp_pub_ = nh.advertise<scan_planner::DataDisp>("/planning/data_display", 100);
     self_inflation_pub_ = nh.advertise<visualization_msgs::Marker>("self_inflation", 10, true);
@@ -128,19 +138,26 @@ namespace scan_planner
     // Same callback queue as planning: a blocked/crashed planner loses heartbeat.
     heartbeat_timer_ = nh.createTimer(ros::Duration(0.05), [this](const ros::TimerEvent &) {
       std_msgs::Bool m;
-      m.data = have_odom_ && exec_state_ != EMERGENCY_STOP;
-      // Final yaw is checked locally in the planner queue, not through a
-      // synchronous service in the velocity forwarding path.
-      if (m.data && navigation_control_.mode == scan_map_navigation::NavigationControl::ALIGN)
-      {
-        const double yaw = getOdomYaw();
-        const double delta = std::atan2(std::sin(navigation_control_.yaw-yaw),std::cos(navigation_control_.yaw-yaw));
-        const int steps = std::max(1,static_cast<int>(std::ceil(std::abs(delta)/0.05)));
-        for (int i=0;i<=steps && m.data;++i)
-          m.data = planner_manager_->grid_map_->getInflateOccupancy(odom_pos_,yaw+delta*i/steps) == 0;
-      }
+      // A live planner in local recovery is NOT a failed input.
+      m.data = have_odom_;
       heartbeat_pub_.publish(m);
+      publishPlannerState();
     });
+    // Deterministic fault injection is available only on the isolated test
+    // launch. It is not registered in normal navigation.
+    bool test_hooks = false;
+    nh.param("enable_test_hooks", test_hooks, false);
+    std::string output_topic;
+    nh.getParam("/scan_velocity_gate/output_topic", output_topic);
+    if (test_hooks && output_topic == "/test/cmd_vel")
+      test_obstacle_srv_ = nh.advertiseService<std_srvs::SetBool::Request, std_srvs::SetBool::Response>(
+          "test_obstacle", [this](std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res) {
+            test_obstacle_ = req.data;
+            if (req.data && have_target_)
+              beginLocalRecovery("TEST: obstacle invalidates candidate");
+            res.success = true;
+            return true;
+          });
 
     if (navi_mode_ == NAVI_MODE::MANUAL_TARGET)
       goal_sub_ = nh.subscribe("/move_base_simple/goal", 1, &SCANReplanFSM::rvizGoalCallback, this);
@@ -159,6 +176,137 @@ namespace scan_planner
       cout << "Wrong navi_mode_ value! navi_mode_=" << navi_mode_ << endl;
   }
 
+  void SCANReplanFSM::publishPlannerState()
+  {
+    using State = scan_map_navigation::PlannerState;
+    State msg;
+    msg.header.stamp = ros::Time::now();
+    msg.header.frame_id = self_inflation_frame_id_;
+    msg.task_id = navigation_control_.task_id;
+    msg.epoch = navigation_control_.epoch;
+    msg.generation = execution_generation_;
+    msg.target_revision = recovery_target_id_;
+    msg.recovery_attempts = local_attempts_;
+    msg.state = State::IDLE;
+    if (have_odom_ && navigation_control_.mode == scan_map_navigation::NavigationControl::ALIGN)
+    {
+      bool safe = true;
+      const double yaw = getOdomYaw();
+      const double delta = std::atan2(std::sin(navigation_control_.yaw-yaw), std::cos(navigation_control_.yaw-yaw));
+      const int steps = std::max(1,static_cast<int>(std::ceil(std::abs(delta)/0.05)));
+      for (int i=0;i<=steps && safe;++i)
+        safe = planner_manager_->grid_map_->getInflateOccupancy(odom_pos_,yaw+delta*i/steps) == 0;
+      msg.state = safe ? State::ALIGNING : State::BLOCKED;
+      msg.reason = safe ? "Final yaw checked" : "Final rotation footprint blocked";
+    }
+    else if (have_odom_ && navigation_control_.mode == scan_map_navigation::NavigationControl::TRACK &&
+             rolling_task_id_ == msg.task_id && rolling_epoch_ == msg.epoch)
+    {
+      if (local_blocked_)
+        msg.state = State::BLOCKED;
+      else if (local_hold_)
+        msg.state = State::RECOVERING;
+      else
+        msg.state = checked_trajectory_ ? State::TRACKING : State::PLANNING;
+      msg.reason = local_reason_;
+    }
+    planner_state_pub_.publish(msg);
+  }
+
+  void SCANReplanFSM::beginLocalRecovery(const std::string &reason)
+  {
+    if (local_hold_ || local_blocked_)
+      return;
+    ++execution_generation_; // old splines AND queued velocities are revoked
+    checked_trajectory_ = false;
+    local_hold_ = true;
+    local_blocked_ = false;
+    local_attempts_ = 0;
+    local_recovery_started_ = ros::WallTime::now();
+    local_retry_at_ = ros::WallTime(0);
+    local_reason_ = reason;
+    publishPlannerState(); // send hold before starting any expensive planning
+    ROS_WARN("Local recovery generation %lu: %s; replanning immediately from measured motion",
+             static_cast<unsigned long>(execution_generation_),reason.c_str());
+  }
+
+  void SCANReplanFSM::runLocalRecovery()
+  {
+    if (local_blocked_ || navigation_control_.mode != scan_map_navigation::NavigationControl::TRACK ||
+        navigation_control_.task_id != rolling_task_id_ || navigation_control_.epoch != rolling_epoch_)
+      return;
+    const auto now = ros::WallTime::now();
+    if ((now-local_recovery_started_).toSec() >= local_recovery_timeout_ || local_attempts_ >= local_max_attempts_)
+    {
+      local_blocked_ = true;
+      local_reason_ = "Local recovery budget exhausted: " + local_reason_;
+      publishPlannerState();
+      ROS_WARN("%s",local_reason_.c_str());
+      return;
+    }
+    if (now < local_retry_at_)
+      return;
+    local_retry_at_ = now+ros::WallDuration(local_retry_period_);
+    ++local_attempts_;
+    // No standstill/quality confirmation stage. Start NOW with measured
+    // velocity, not the velocity of the invalidated spline or an assumed zero.
+    start_pt_ = odom_pos_;
+    start_vel_ = odom_vel_;
+    start_acc_.setZero();
+    bool success = planner_manager_->planGlobalTraj(start_pt_,start_vel_,start_acc_,end_pt_,
+                                                   Eigen::Vector3d::Zero(),Eigen::Vector3d::Zero());
+    if (success)
+      success = callReboundReplan(true,local_attempts_ > 1);
+    if (success)
+    {
+      need_hover_stop_ = false;
+      replan_fail_count_ = 0;
+      flag_escape_emergency_ = true;
+      changeFSMExecState(EXEC_TRAJ,"LOCAL_RECOVERED");
+      ROS_INFO("Local recovery accepted a checked new trajectory after %d attempts",local_attempts_);
+    }
+  }
+
+  bool SCANReplanFSM::validateLocalTrajectory()
+  {
+    if (test_obstacle_)
+      return false;
+    auto info = &planner_manager_->local_data_;
+    auto map = planner_manager_->grid_map_;
+    if (!std::isfinite(info->duration_) || info->duration_ <= 0)
+      return false;
+    // Check the complete candidate, including its endpoint and initial turn.
+    const double yaw = getOdomYaw();
+    Eigen::Vector3d p0 = info->position_traj_.evaluateDeBoorT(0);
+    Eigen::Vector3d p1 = info->position_traj_.evaluateDeBoorT(std::min(0.05,info->duration_));
+    const double heading = estimateYawFromSegment(p0,p1);
+    const double delta = std::atan2(std::sin(heading-yaw),std::cos(heading-yaw));
+    const int turns = std::max(1,static_cast<int>(std::ceil(std::abs(delta)/0.05)));
+    for (int i=0;i<=turns;++i)
+      if (map->getInflateOccupancy(odom_pos_,yaw+delta*i/turns) != 0)
+      {
+        ROS_WARN_THROTTLE(1.0,"Candidate rejected: initial turn at xyz=(%.3f,%.3f,%.3f), yaw=%.3f",
+                          odom_pos_.x(),odom_pos_.y(),odom_pos_.z(),yaw+delta*i/turns);
+        return false;
+      }
+    const int steps = std::max(1,static_cast<int>(std::ceil(info->duration_/0.02)));
+    for (int i=0;i<=steps;++i)
+    {
+      const double t = info->duration_*i/steps;
+      Eigen::Vector3d p = info->position_traj_.evaluateDeBoorT(t);
+      Eigen::Vector3d next = info->position_traj_.evaluateDeBoorT(std::min(t+0.02,info->duration_));
+      const double h = i == steps ? estimateYawFromSegment(p1,p) : estimateYawFromSegment(p,next);
+      if (!p.allFinite() || map->getInflateOccupancy(p,h) != 0)
+      {
+        ROS_WARN_THROTTLE(1.0,"Candidate rejected: trajectory t=%.3f/%.3f, xyz=(%.3f,%.3f,%.3f), yaw=%.3f",
+                          t,info->duration_,p.x(),p.y(),p.z(),h);
+        return false;
+      }
+      p1 = p;
+    }
+    return true;
+  }
+
   void SCANReplanFSM::rollingTargetCallback(const scan_map_navigation::LocalTarget::ConstPtr &msg)
   {
     const double age = (ros::Time::now()-msg->header.stamp).toSec();
@@ -171,23 +319,49 @@ namespace scan_planner
       return;
     last_target_stamp_ = msg->header.stamp;
     const bool same_task = msg->task_id == rolling_task_id_ && msg->epoch == rolling_epoch_;
-    if (same_task && rolling_final_ == msg->final_goal && (target-end_pt_).norm() < 0.03 &&
+    const bool held = same_task && (local_hold_ || local_blocked_);
+    const bool replacement = same_task && msg->recovery_id > recovery_target_id_ &&
+        msg->expected_generation == execution_generation_ &&
+        navigation_control_.task_id == msg->task_id && navigation_control_.epoch == msg->epoch &&
+        navigation_control_.mode == scan_map_navigation::NavigationControl::TRACK;
+    if (held && !replacement)
+      return; // ordinary/old/unauthorized targets cannot thaw a recovery
+    if (msg->recovery_id && !replacement)
+      return;
+    if (!replacement && same_task && rolling_final_ == msg->final_goal && (target-end_pt_).norm() < 0.03 &&
         (have_target_ || (target-odom_pos_).head<2>().norm() < 0.12))
       return; // repeated delivery is not a new planning request
-    if (!same_task)
+    if (!same_task) {
       resetRecoveryForNewGoal();
+      recovery_target_id_=0;
+    }
     rolling_task_id_ = msg->task_id;
     rolling_epoch_ = msg->epoch;
     rolling_final_ = msg->final_goal;
     // Same-task updates preserve the executing spline and recovery bookkeeping.
     // No reset, no controller stop; the next spline replaces the old one.
-    end_pt_ = target;
+    if (held) {
+      end_pt_=target;
+      recovery_target_id_=msg->recovery_id;
+      // Revoke even queued commands from the previous recovery before planning.
+      ++execution_generation_;
+      checked_trajectory_=false;
+      local_hold_=true; local_blocked_=false;
+      local_attempts_=0; local_retry_at_=ros::WallTime(0);
+      local_recovery_started_=ros::WallTime::now();
+      local_reason_="Adaptive target accepted; checking new trajectory";
+      trigger_=have_target_=have_new_target_=true;
+      publishPlannerState();
+      return; // runLocalRecovery uses current MEASURED pose/velocity, no standstill wait
+    }
     if (!planner_manager_->planGlobalTraj(odom_pos_,odom_vel_,Eigen::Vector3d::Zero(),
-                                        end_pt_,Eigen::Vector3d::Zero(),Eigen::Vector3d::Zero()))
+                                        target,Eigen::Vector3d::Zero(),Eigen::Vector3d::Zero()))
     {
       ROS_WARN("Rolling target reference generation failed");
       return;
     }
+    end_pt_=target;
+    if (replacement) recovery_target_id_=msg->recovery_id;
     trigger_ = have_target_ = have_new_target_ = true;
     visualization_->displayGoalPoint(end_pt_,Eigen::Vector4d(0,0.5,0.5,1),0.3,0);
     if (exec_state_ == WAIT_TARGET)
@@ -201,6 +375,7 @@ namespace scan_planner
     scan_map_navigation::LocalTrajectory tagged;
     tagged.task_id = rolling_task_id_;
     tagged.epoch = rolling_epoch_;
+    tagged.generation = execution_generation_;
     tagged.order = spline.order;
     tagged.traj_id = spline.traj_id;
     tagged.start_time = spline.start_time;
@@ -747,6 +922,8 @@ namespace scan_planner
     static string state_str[7] = {"INIT", "WAIT_TARGET", "GEN_NEW_TRAJ", "REPLAN_TRAJ", "EXEC_TRAJ", "EMERGENCY_STOP"};
     int pre_s = int(exec_state_);
     exec_state_ = new_state;
+    if (new_state == EMERGENCY_STOP && navi_mode_ == NAVI_MODE::ROLLING_TARGET)
+      beginLocalRecovery(pos_call);
     cout << "[" + pos_call + "]: from " + state_str[pre_s] + " to " + state_str[int(new_state)] << endl;
   }
 
@@ -765,6 +942,11 @@ namespace scan_planner
   void SCANReplanFSM::execFSMCallback(const ros::TimerEvent &e)
   {
     updateLocalTrajTimeFreeze();
+    if (navi_mode_ == NAVI_MODE::ROLLING_TARGET && (local_hold_ || local_blocked_))
+    {
+      runLocalRecovery();
+      return;
+    }
 
     static int fsm_num = 0;
     fsm_num++;
@@ -1076,6 +1258,8 @@ namespace scan_planner
   void SCANReplanFSM::checkCollisionCallback(const ros::TimerEvent &e)
   {
     updateLocalTrajTimeFreeze();
+    if (navi_mode_ == NAVI_MODE::ROLLING_TARGET && (local_hold_ || local_blocked_))
+      return;
 
     LocalTrajData *info = &planner_manager_->local_data_;
     auto map = planner_manager_->grid_map_;
@@ -1096,6 +1280,12 @@ namespace scan_planner
       Eigen::Vector3d pos_next = info->position_traj_.evaluateDeBoorT(std::min(t + time_step, info->duration_));
       if (map->getInflateOccupancy(pos, estimateYawFromSegment(pos, pos_next)))
       {
+        if (navi_mode_ == NAVI_MODE::ROLLING_TARGET && t-t_cur < emergency_time_)
+        {
+          beginLocalRecovery("Near-term trajectory collision");
+          changeFSMExecState(EMERGENCY_STOP,"SAFETY");
+          return;
+        }
         if (planFromCurrentTraj()) // Make a chance
         {
           changeFSMExecState(EXEC_TRAJ, "SAFETY");
@@ -1131,8 +1321,18 @@ namespace scan_planner
 
     cout << "final_plan_success=" << plan_success << endl;
 
+    if (plan_success && navi_mode_ == NAVI_MODE::ROLLING_TARGET)
+    {
+      plan_success = validateLocalTrajectory();
+      if (!plan_success)
+        beginLocalRecovery("Candidate trajectory/initial turn blocked");
+    }
+
     if (plan_success)
     {
+      local_hold_ = local_blocked_ = false;
+      checked_trajectory_ = true;
+      local_reason_ = "Checked trajectory ready";
 
       auto info = &planner_manager_->local_data_;
 
@@ -1162,6 +1362,7 @@ namespace scan_planner
 
       bspline_pub_.publish(bspline);
       publishTaggedTrajectory(bspline);
+      publishPlannerState();
 
       visualization_->displayOptimalTraj(info->position_traj_, 0);
     }
@@ -1312,6 +1513,10 @@ namespace scan_planner
 
   bool SCANReplanFSM::resetCallback(std_srvs::Trigger::Request &, std_srvs::Trigger::Response &res)
   {
+    ++execution_generation_;
+    local_hold_ = local_blocked_ = checked_trajectory_ = false;
+    local_attempts_ = 0;
+    local_reason_ = "Task reset";
     target_accept_after_ = ros::Time::now();
     have_target_ = have_new_target_ = trigger_ = false;
     replan_fail_count_ = 0;
@@ -1321,6 +1526,7 @@ namespace scan_planner
     planner_manager_->local_data_.start_time_ = ros::Time(0);
     planner_manager_->local_data_.duration_ = 0;
     changeFSMExecState(WAIT_TARGET, "RESET");
+    publishPlannerState();
     res.success = true;
     res.message = "SCAN task cleared";
     return true;

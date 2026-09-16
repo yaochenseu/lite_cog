@@ -14,6 +14,7 @@
 #include <scan_map_navigation/LocalTrajectory.h>
 #include <scan_map_navigation/NavigationControl.h>
 #include <scan_map_navigation/VelocityCommand.h>
+#include <scan_map_navigation/PlannerState.h>
 #include <tf/tf.h>
 
 #include "bspline_opt/uniform_bspline.h"
@@ -30,6 +31,9 @@ ros::Publisher desired_pub;
 scan_map_navigation::NavigationControl control;
 ros::WallTime control_received, gate_received;
 bool execution_allowed = false;
+scan_map_navigation::PlannerState planner_state;
+ros::WallTime planner_received;
+uint64_t trajectory_generation = 0;
 ros::Publisher execution_frozen_pub;
 ros::Subscriber bspline_sub;
 ros::Subscriber odom_sub;
@@ -140,6 +144,8 @@ void publishCommand(const geometry_msgs::Twist &cmd)
   envelope.epoch = control.epoch;
   envelope.task_id = control.task_id;
   envelope.mode = control.mode;
+  envelope.generation = control.mode == scan_map_navigation::NavigationControl::ALIGN ?
+                        planner_state.generation : trajectory_generation;
   envelope.command.header.frame_id = "base_link";
   envelope.command.header.stamp = ros::Time::now();
   envelope.command.twist = cmd;
@@ -163,6 +169,9 @@ void publishExecutionFrozen(bool frozen)
 void bsplineCallback(const scan_map_navigation::LocalTrajectoryConstPtr &msg)
 {
   if (msg->task_id != control.task_id || msg->epoch != control.epoch ||
+      (planner_state.task_id == msg->task_id && msg->generation < planner_state.generation) ||
+      (receive_traj && (msg->generation < trajectory_generation ||
+                       (msg->generation == trajectory_generation && msg->traj_id <= traj_id))) ||
       msg->start_time <= accept_after || msg->order != 3 || msg->pos_pts.size() < 4 ||
       msg->knots.size() != msg->pos_pts.size() + msg->order + 1)
     return;
@@ -195,6 +204,7 @@ void bsplineCallback(const scan_map_navigation::LocalTrajectoryConstPtr &msg)
 
   traj_duration = traj[0].getTimeSum();
   traj_id = msg->traj_id;
+  trajectory_generation = msg->generation;
   exec_time = 0.0;
   last_update_time = ros::Time::now();
   receive_traj = true;
@@ -219,7 +229,13 @@ void recoveryStateCallback(const std_msgs::BoolConstPtr &msg)
 void cmdCallback(const ros::TimerEvent &)
 {
   const double lease_age = (ros::Time::now()-control.header.stamp).toSec();
+  const bool matching_state = planner_state.task_id == control.task_id && planner_state.epoch == control.epoch;
+  const bool checked = control.mode == scan_map_navigation::NavigationControl::ALIGN ?
+      planner_state.state == scan_map_navigation::PlannerState::ALIGNING :
+      (planner_state.state == scan_map_navigation::PlannerState::TRACKING &&
+       receive_traj && trajectory_generation == planner_state.generation);
   if (!control.task_id || control.mode == scan_map_navigation::NavigationControl::STOP ||
+      !matching_state || !checked || (ros::WallTime::now()-planner_received).toSec() > 0.7 ||
       lease_age < -0.2 || lease_age > 0.5 ||
       (ros::WallTime::now()-control_received).toSec() > 0.5 ||
       !execution_allowed || (ros::WallTime::now()-gate_received).toSec() > 0.15)
@@ -331,6 +347,24 @@ int main(int argc, char **argv)
       +[](const std_msgs::Bool::ConstPtr &msg) {
         execution_allowed = msg->data;
         gate_received = ros::WallTime::now();
+      });
+  auto planner_sub = node.subscribe<scan_map_navigation::PlannerState>("/scan_map_nav/planner_state", 1,
+      +[](const scan_map_navigation::PlannerState::ConstPtr &msg) {
+        if (msg->header.stamp < planner_state.header.stamp)
+          return;
+        planner_state = *msg;
+        planner_received = ros::WallTime::now();
+        if (msg->task_id == control.task_id &&
+            (msg->state == scan_map_navigation::PlannerState::RECOVERING ||
+             msg->state == scan_map_navigation::PlannerState::BLOCKED ||
+             (receive_traj && trajectory_generation < msg->generation)))
+        {
+          if (receive_traj && trajectory_generation < msg->generation)
+            receive_traj = false;
+          publishStop();
+          publishExecutionFrozen(true);
+          last_update_time = ros::Time::now();
+        }
       });
   odom_sub = node.subscribe(body_pose_topic, 20, odomCallback, ros::TransportHints().tcpNoDelay());
   recovery_state_sub = node.subscribe("planning/recovery_active", 10, recoveryStateCallback);

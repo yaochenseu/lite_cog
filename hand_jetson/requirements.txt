@@ -1,0 +1,7 @@
+# Runtime packages that are portable across JetPack releases.
+numpy>=1.23,<2
+scipy>=1.9,<2
+filterpy==1.4.5
+
+# Install OpenCV from JetPack/apt so that camera and GStreamer support are kept.
+# Install aarch64 ONNX Runtime separately with a build matching the JetPack/CUDA version.

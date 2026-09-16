@@ -12,6 +12,6 @@
   <depend>global_planner</depend><depend>plan_env</depend><depend>path_searching</depend>
   <depend>bspline_opt</depend><depend>traj_utils</depend><depend>visualization_msgs</depend>
   <depend>cv_bridge</depend>
-  <exec_depend>scan_planner</exec_depend><exec_depend>hdl_localization</exec_depend>
+  <exec_depend>scan_planner</exec_depend><depend>hdl_localization</depend>
   <exec_depend>map_server</exec_depend><exec_depend>rviz</exec_depend>
 </package>

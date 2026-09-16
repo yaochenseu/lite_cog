@@ -1,13 +1,22 @@
 # Map-frame rolling waypoint manager. No per-velocity service checks.
-lookahead: 0.9
+lookahead: 2.0
 corner_cut: 0.12
-target_step: 0.18
+# Event-driven updates, measured from the LAST SENT target/transform.
+target_step: 0.08
 correction_step: 0.08
-target_period: 0.3
+target_period: 0.05
+loop_period: 0.05
 # Single-update discontinuities, measured near the robot/active target.
 jump_distance: 0.8
 jump_yaw: 0.5
 stall_timeout: 15.0
 max_replans: 2
+local_recovery_limit: 4.0
+# A local recovery budget exhaustion keeps the route and retries after STOP.
+local_retry_wait: 0.2
+guide_extension_failures: 3
+# Offsets from the original failed guide, measured ALONG the global path.
+guide_extension_offsets: [0.1, 0.2, 0.3, 0.4, 0.5]
+lease_progress_timeout: 0.3
 xy_tolerance: 0.15
 yaw_tolerance: 0.12

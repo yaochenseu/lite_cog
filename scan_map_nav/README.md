@@ -1,36 +1,39 @@
-# Lite3 地图导航 + SCAN 滚动中间目标
+# Lite3 静态全局地图 + SCAN 滚动目标导航
 
-独立 ROS1 工作空间。原 `nav`、`SCAN-Planner`、雷达驱动、transfer 和地图未修改。
+当前使用静态地图 Dijkstra + 2.0 m 滚动目标 + SCAN 局部避障，不启用实时全局地图更新。
+保留 SCAN 急停恢复、独立任务许可续期及短暂许可超时恢复；增加定位超时的有限自动重试。不需要 arm/解锁。
+原 nav、SCAN-Planner、MID360 驱动、transfer、PGM/PCD 和航点文件未修改。
 
 ## 当前数据流
 
 ```text
-PCD + MID360 + IMU → 原 NDT → map→odom
-PGM/YAML → Dijkstra → 全局路径（保留在 map）
-                             ↓
-                 有顺序的滚动前视中间点
-                             ↓ 同一 TF 时刻的定位校正
-                       odom 局部目标
-                             ↓
-MID360 + leg_odom2 → SCAN 局部地图、规划和闭环控制
-                             ↓ 直接输出带任务标识的速度
-                 独立限速、健康与超时保护 → cmd_vel → ros2qnx
+PGM/YAML → StaticLayer + InflationLayer → Dijkstra → map 全局路径
+                                                       ↓
+                                                2.0 m 滚动目标
+PCD + MID360 + IMU → 原 NDT → map→odom → 同时刻坐标校正
+                                                       ↓
+                                               odom 中间目标
+MID360 + leg_odom2 → SCAN 局部地图、规划、闭环控制 → 速度门控 → ros2qnx
 ```
 
-目标管理器不订阅 raw_cmd，不转发速度，不同步调用碰撞检查服务。
-正常换点、普通定位修正不清空 SCAN。中间点提前切换，不要求逐点停稳或对齐朝向。
-真正的终点在 map 中判断到达；固定朝向由 SCAN 控制器对齐，局部规划器检查旋转足迹。
+不再启动 scan_runtime_map，不依赖 runtime_grid / planning_grid，不要求静态地图每 0.7 秒更新。
+雷达、IMU、里程计、定位、规划器心跳及动态 TF 的时效保护仍保留。
+
+全局膨胀半径最新按用户要求从 0.05 m 改为 0.10 m（config/global.yaml），cost_scaling_factor 仍为 5.0。
+这是从障碍格向外的总半径，不是机身外额外 10 cm。没有缩小 footprint 或 SCAN 的双圆柱尺寸，也没有取消局部碰撞检查。
+全局路径可能更贴近墙体或进入机身不能通过的通道，SCAN 可能绕行或停车；不保证更容易通过。
+此项只改配置，无需编译；先取消任务并关闭导航，再重新启动后生效，不在线修改正在执行的路线。
 
 ## 使用
 
-关闭旧导航及独立 SCAN 窗口，保留 transfer；不要同时运行两套速度控制。
-雷达没有数据时，单独终端启动：
+先关闭其他导航及独立 SCAN，保留 transfer。不要同时运行两套速度控制。
+MID360 没有数据时，在独立终端启动：
 
 ```bash
 bash /home/ysc/lite_cog/system/scripts/lidar/start_livox.sh
 ```
 
-**本次修改了 C++ 和消息定义，必须编译并完整重启本套导航，不能只重启 goto。**
+更新代码后编译并完整重启本套导航，不能只重新运行 goto：
 
 ```bash
 cd /home/ysc/lite_cog/scan_map_nav
@@ -38,9 +41,9 @@ cd /home/ysc/lite_cog/scan_map_nav
 ./start_nav.sh
 ```
 
-默认使用 system/map/lite3.pcd、lite3.yaml、waypoints.yaml。
-零初值对应建图起点和起始朝向，不是全局自动定位。先在 RViz 确认定位正确。
-不在固定起点时，用 2D Pose Estimate 或启动参数提供初值：
+默认读取 system/map/lite3.pcd、lite3.yaml、waypoints.yaml。
+零初值对应建图起点和起始朝向，不是全局自动定位；先在 RViz 确认定位正确。
+不在固定起点时，使用 2D Pose Estimate 或明确初值：
 
 ```bash
 ./start_nav.sh init_x:=0.0 init_y:=0.0 init_yaw:=0.0
@@ -53,39 +56,77 @@ cd /home/ysc/lite_cog/scan_map_nav
 ./goto hall
 ./goto room
 ./goto door
+./goto arm
 ./goto hall --any-yaw
 ./goto --cancel
 ```
 
-无需 arm/解锁。启动无目标时保持停止。使用本目录 ./goto，不要混用旧 PATH 的 goto。
-新目标替换旧目标；故障终止后恢复输入再发新目标，旧任务不自动续走。
-首测只选空旷短距离目标，保留遥控急停。结束时先 ./goto --cancel，再关闭导航。
+arm 是已有航点名称，不是解锁操作。启动无目标不运动；新目标替换旧目标。
+首次测试选择空旷短距离目标，保留遥控急停。结束先 ./goto --cancel，再关闭导航。
 
-## 行为与参数
+## 滚动选点与恢复
 
-参数文件：src/scan_map_navigation/config/rolling.yaml。
+- 正常前视 2.0 m，沿路径顺序推进，不跳到交叉路径或平行回程分支；转角或临近终点时可能更短。
+- 转角切弯上限 0.12 m，选点中心连线不能穿过静态地图中的墙或未知区域。
+- 管理循环 20 Hz；相对上次实际下发的引导点，地图位置变化达到 0.08 m 才更新，最小发布间隔仍为 0.05 秒。取消定时补发及接近旧点时 0.03 m 即更新的例外；没有明显变化就保持 SCAN 当前目标，不因经过 0.5 秒重新下发。
+- 定位校正使该引导点的 odom 坐标相对上次下发变换偏移达到 0.08 m 时更新（包含平移及旋转的影响）。小幅真实变化相对上次下发累积，不逐帧重置比较基准；普通校正、正常换点不 reset。
+- 首次目标、最终目标标记变化、局部失败/任务许可恢复或新全局路线所需的重新下发仍保留；取消的是正常跟踪中的无条件补发，不是故障后的重试。任务许可和状态心跳不受影响。RViz 引导点持续显示，任务结束或取消时删除，无需靠补发规划命令维持显示。
+- 不使用永久稀疏点，也不再使用 1.3/1.6/2.0 m 自适应加长、2 m 走廊阻塞确认或实时地图后台换路。
+- 新增的是小步加长：连续 3 轮 SCAN 局部恢复耗尽后，以首次失败的引导点为基准，沿原路径依次尝试 +0.1/+0.2/+0.3/+0.4/+0.5 m；不是累计增加 1.5 m，也不是沿世界坐标 X 轴平移。
+- 直路原地受阻时，新的 2.0 m 基准对应约 2.1～2.5 m 引导点。SCAN 自身 1.5 m 局部规划窗口未改，它分段朝较远引导点规划，不是一次执行整段 2.5 m。
+- 每档失败才尝试下一档；越过终点会截到终点并去重，已落在当前引导点后方、穿静态墙/未知区域或切弯超限的档位跳过，不关闭碰撞检查。
+- 加长后保持该引导点，正常滚动引导追上后才恢复普通选点，避免立即缩回。普通阶段实际沿路径推进 0.2 m 后清除连续失败计数；单次 TRACKING 状态不算摆脱阻塞。
+- 路线偏离超过 0.8 m、无法沿静态路线选点时，停车并有限全局重规划（最多 2 次）。
+- 局部恢复耗尽、行进中 15 秒无运动进展，不再触发全局重规划；保持原路线和目标，停车间隔重试 SCAN。
+- 全局重规划重新使用静态地图，不会看到新出现的箱子，也不会自动清除旧地图障碍。
+- XY 到达容差 0.15 m；需要终点朝向时，朝向容差 0.12 rad，旋转也接受局部碰撞检查。
 
-- 前视距离 0.9 m，正常目标更新间隔至少 0.3 s，沿路径移动约 0.18 m 才更新；每秒补发防止丢失，SCAN 忽略重复点。
-- 同一目标受定位校正影响超过 0.08 m 时更新其 odom 坐标。
-- 前视目标不能跳过大转角；选点时做静态地图视线检查，避免隔墙取点。不是原来逐条速度的静态机身检查。
-- 单次附近定位变换突变超过 0.8 m 或 0.5 rad，停车报错，请检查 RViz 后重发目标。普通修正不进入“等待稳定—清空—重建”的循环。
-- 无可用前视点、偏离路径或 15 秒无进展时，最多请求 2 次全局重新规划。只有任务边界或这类异常重规划调用 reset。
-- XY 容差 0.15 m，最终朝向容差 0.12 rad。
-- 前进/后退/横移/偏航上限仍为 0.35/0.18/0.25 m/s、0.8 rad/s；最终对齐上限 0.4 rad/s。
+```text
+SCAN 急停 → 零速度，保留目标与 map 路线
+         → 暂停滚动切点，SCAN 从实测位置/速度重试
+         → 新轨迹通过完整碰撞检查：继续同一任务
+         → 局部恢复耗尽：BLOCKED_WAIT，保持停车 0.2 秒
+         → 前两次 LOCAL_RETRY；第三次起 EXTENDING_TARGET +0.1m ... +0.5m
+         → 仅 reset 局部规划/控制器，用所选引导点生成并复检新轨迹
+         → 五档仍失败：停车并间隔重试最后有效点，不因此重算全局路径
+```
 
-SCAN 使用新增的 mode 4，单个中间目标接续局部重规划；不再把整条 Dijkstra 路径转换成全局多项式。
-机器人双圆柱尺寸仍是半径 0.35 m、中心偏置 ±0.18 m，没有缩小。
-当前未启用原手动单目标模式的死路后退恢复。
+没有额外等待机身停稳的步骤，规划使用当前实测速度。
+局部重试间隔 0.1 秒，最多 20 次或 3 秒；目标管理器另有 4 秒恢复上限。
+以上是每轮的快速恢复预算；“3 次失败”按完整恢复轮次计，不是每次优化器内部迭代。
+本轮耗尽后的轮间等待由 rolling.yaml 的 local_retry_wait 控制，默认 0.2 秒。
+等待中持续发布 STOP，原 map 路线、最终目标及 task_id/epoch 不变；只提升局部 generation，旧轨迹不能复用。
+再次尝试使用当前定位变换换算原引导点或本档加长点；必须生成并检查通过新轨迹才能运动。
+整个任务仍受原 300 秒总期限约束，不因局部重试延长；取消、目标替换、输入故障和明显定位跳变仍打断等待。
+NDT 过期单独走下一节的有限定位恢复流程。任务许可机制、机身尺寸、限速与碰撞检查本次未改；加快给点不保证消除其他原因的停车。
 
-## 指令与故障隔离
+## 定位超时重试
 
-- navigator 发布短期任务许可 /scan_map_nav/control，而不是速度；有效期 0.5 秒。
-- 控制器直接发布 /scan_map_nav/desired_cmd；速度有效期 0.25 秒。
-- 目标、轨迹、速度携带 task_id 和 epoch。取消、替换目标或输入故障不能把旧轨迹当作新任务执行。
-- gate 通过 /scan_map_nav/execution_allowed 反馈放行状态；未放行或反馈超时，控制器输出零并冻结轨迹时钟。
-- SCAN 自身避障与紧急停车保留。取消、健康故障、明显定位跳变仍停止。
-- 传感器及规划心跳超时仍为 0.7 秒；NDT 收敛、inlier ≥ 0.5、matching_error ≤ 0.3 的检查未放宽。
-- 已移除正常启动中的 static_check 参数和 route_recovery 等待逻辑。legacy_navigator.py、recovery.yaml 仅保留为历史参考，不启动。
+- NDT `/status` 的源时间戳和接收时效从 0.7 秒放宽到 1.2 秒；导航 TF 时效和全局代价地图的 TF 容差同步为 1.2 秒。其余传感器与规划心跳仍为 0.7 秒。
+- `Stale ndt` 或定位 TF 暂时不可用/过期：立即停车、清空旧局部轨迹，保留用户最终目标，显示 `LOCALIZATION_RECOVERY 1/3`。
+- 每次最多等 3 秒，最多 3 次，整个 goto 任务累计计数；等到故障后产生的有效新 NDT 状态和新 TF 后即可提前恢复，不固定等待满 3 秒。
+- 恢复后从当前位置重新生成全局路线及 SCAN 轨迹，以新的内部 task_id 和门控当前有效的 epoch 执行同一个 action 目标；不会复用失效的旧速度或旧轨迹，也不会重启 NDT 节点。
+- 连续无定位时最多等待约 9 秒（另有 reset 等处理时间）；任务总期限仍为 300 秒，不因重试延长。取消、定位质量差、明显定位跳变、其他输入故障仍终止任务。重试耗尽后保持停车，需重新发送目标。
+
+本次仅改 Python 和 launch，无需编译，完整重启导航生效。默认参数等价于：
+
+```bash
+./start_nav.sh localization_timeout:=1.2 localization_retries:=3 localization_retry_wait:=3.0
+```
+
+这增加延迟容忍和自动恢复，不提高 NDT 本身的计算速度；放宽时效也意味着可能使用更旧的定位结果，需现场低速短距离验收。
+
+## 保留的保护
+
+- 任务许可由独立线程每 0.05 秒续期，有效期 0.5 秒；计算超过 0.3 秒未推进则不再续期，线程存活不能掩盖计算卡死。
+- 短暂许可失效立即停车、保留任务。导航恢复后必须完成局部规划器和控制器 reset、ACK 及新 generation 确认才能恢复。
+- 许可恢复窗口 2 秒内始终停车；持续失联撤销任务，延迟旧指令不得继续运动。
+- 非定位传感器和规划心跳超时仍为 0.7 秒；NDT 时效为 1.2 秒，仍要求收敛、inlier ≥ 0.5、matching_error ≤ 0.3。
+- 同时间戳查询 map/base_link 与 odom/base_link；明显校正跳变超过 0.8 m 或 0.5 rad 仍终止任务。
+- 前进/后退/横移上限 0.35/0.18/0.25 m/s，偏航上限 0.8 rad/s，终点对齐上限 0.4 rad/s。
+- 双圆柱半径 0.35 m、中心偏置 ±0.18 m；SCAN 局部规划范围 1.5 m，尺寸和完整候选碰撞检查未缩减。
+- navigator 不处理速度、不逐条调用静态足迹审批；静态检查服务仅供诊断。
+- 非定位时效类输入故障后需重新发送目标；局部避障、短暂许可及上述有限定位超时恢复不要求手动重发。
 
 ## 查看状态
 
@@ -94,28 +135,52 @@ cd /home/ysc/lite_cog/scan_map_nav
 source env.sh
 rostopic echo /scan_map_nav/task_state
 rostopic echo /scan_map_nav/gate_state
-rostopic echo /scan_map_nav/local_target
+rostopic echo /scan_map_nav/planner_state
+rostopic echo /scan_map_nav/last_fault
 rostopic info /cmd_vel
 ```
 
 /cmd_vel 应只有 /scan_velocity_gate 发布，/cmd_vel_corrected 不应有竞争发布者。
-RViz 中橙色球是当前 odom 中间目标；全局路径显示在 map 中。末次目标标记约两秒后消失。
-任务状态：PLANNING、TRACKING、ALIGNING、REPLANNING、SUCCEEDED、CANCELLED、ABORTED。
-gate 的 IDLE 表示无活动任务且输入正常，READY 表示当前指令可放行；Controller command expired、Task lease invalid/expired 会明确说明超时原因。
+RViz 显示静态地图、静态膨胀代价、map 全局路线及橙色滚动目标，不再显示实时占据层。
+TRACKING 不保证速度已放行，实际情况查看 gate_state / planner_state。
 
-## 边界及测试
+## 测试与回退记录
 
 ```bash
 cd /home/ysc/lite_cog/scan_map_nav
 ./test.sh
 ```
 
-测试使用私有 localhost ROS master 和 /test/cmd_vel，不启动 ros2qnx。
-集成测试中定位修正只改变 map→odom，不改变连续的腿式里程计。
-历史等待恢复单测仅用于保留旧实现对照，不代表当前导航仍使用该逻辑。
+测试使用独立 localhost ROS master，仅输出 /test/cmd_vel，不启动 ros2qnx。
+集成测试只发布一次故意使用旧时间戳的静态地图，且不启动 runtime_grid / planning_grid 发布者。
+同时验证 Dijkstra 绕墙、SCAN 跟踪、终点朝向、定位校正、局部恢复、许可恢复、取消及输入故障。
+局部恢复专项持续拒绝候选超过 15 秒并经历多轮预算，验证只有一条全局路线、始终停车；解除拒绝后同任务到达，并检查等待期间取消/断流/替换目标。
+引导点专项验证未到旧点就更新、第三轮失败后逐档加长、全程保留同一全局路径和任务、解除拒绝后到达。
+另含定位专项：0.9 秒延迟、NDT/TF 断流恢复、取消、质量故障、定位跳变及三次重试耗尽。
+此前 0.05 m 膨胀下常规长距离绕墙回归被局部碰撞检查拦停；最新 0.10 m 与引导点版本的实际验证范围见 TEST_RESULTS.md，不能用协议测试代替真实避障验收。
+test_hooks 仅在显式启用且输出为 /test/cmd_vel 时注册，正常启动不提供。
 
-这不是实机验收：真实雷达噪声、NDT 延迟、机身动力学和算力负载仍需实测。
-本次没有改上游 NDT 的时间戳合成，也没有改 SCAN 的点云/雷达位姿配对。
-全局规划仍只有 static+inflation；请求重规划不保证能绕开只存在于实时雷达中的封路障碍。
-选点视线检查不是全路径足迹证明，实际避障仍依赖 SCAN 的实时局部地图。
-软件停车不能替代底盘硬件看门狗和遥控急停。结果见 TEST_RESULTS.md。
+回退前代码备份：
+/home/ysc/lite_cog/scan_nav_rollback_backup.jCo4nG/scan_map_nav_before_rollback.tar.gz
+
+本次定位超时重试修改前备份：
+/home/ysc/lite_cog/scan_ndt_retry_backup.63rtaV/scan_map_nav_before_ndt_retry.tar.gz
+
+局部失败仅局部重试修改前备份：
+/home/ysc/lite_cog/scan_local_retry_backup.mxGV5R/scan_map_nav_before_local_retry.tar.gz
+
+加快引导点与五档加长前备份：
+/home/ysc/lite_cog/scan_guide_tuning_backup.2iyKsD/scan_map_nav_before_guide_tuning.tar.gz
+
+2 m 引导点与更短更新间隔修改前备份：
+/home/ysc/lite_cog/scan_2m_guide_backup.p9j5S6/scan_map_nav_before_2m_guide.tar.gz
+
+runtime_map.cpp、PlanningGrid、planning_grid.py、async_plan.py 及其历史测试保留供对照，
+但当前导航不启动、不导入这套实时地图/自适应流程。historical_async_execution.py 只适用于回退前代码，
+不计入当前回归；保留的纯逻辑模块测试也不代表当前启用了这些功能。
+旧目标替换协议字段保持兼容，当前目标管理器不发送自适应 recovery_id。
+IMPLEMENTATION_PLAN.md 的实时地图清单是历史记录，不是当前启用功能。
+
+这次回退消除了实时规划地图时效这一依赖，不保证所有停车问题消失。
+新的障碍仍由 SCAN 局部绕行；全局路径不适应环境增删，无法绕过时应保持停车。
+隔离测试不代替真实 MID360/NDT 延迟、机身动力学和现场导航验收。结果见 TEST_RESULTS.md。

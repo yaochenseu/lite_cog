@@ -1,5 +1,0 @@
-bin/
-runtime/
-.venv/
-__pycache__/
-iflytek.env
